@@ -1,14 +1,27 @@
 #include "MatrixView.hpp"
+#include "SettingsWindow.hpp"
+
 #include <StorageDefs.h>
+#include <Catalog.h>
+#include <LocaleRoster.h>
 #include <FindDirectory.h>
 #include <Entry.h>
 #include <Directory.h>
+#include <PopUpMenu.h>
+#include <Screen.h>
+#include <MenuItem.h>
+#include <Alert.h>
+
 #include <iostream>
 #include <math.h> // For gradients
 #include <string.h>
 
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "MatrixView"
+
 MatrixView::MatrixView(BRect frame, const char* name)
-	: BView(frame, name, B_FOLLOW_NONE, B_WILL_DRAW | B_PULSE_NEEDED)
+	: BView(frame, name, B_FOLLOW_NONE, B_WILL_DRAW | B_PULSE_NEEDED),
+	winPos(100, 100)		// Default window position
 {
 	memset(_index, 0, sizeof(_index));
 	memset(_gray, 0, sizeof(_gray));
@@ -33,6 +46,35 @@ MatrixView::~MatrixView() {
 	if (_dotInactive) delete _dotInactive;
 }
 
+
+void MatrixView::MessageReceived(BMessage* in) {	
+	switch (in->what) {
+		case OPEN_PREFERENCES:		
+		{
+			// DEBUGGING
+			printf ("Trying to show the settings...\n");
+			_ShowSettingsWindow();
+			break;
+		}
+		case B_ABOUT_REQUESTED:
+		{
+			BAlert* toShow = new BAlert(B_TRANSLATE("About the program"),
+						B_TRANSLATE("All Possible Images for Haiku OS\n"
+						"By Alexey \"Hitech\" Burshtein\nVersion 1.0\n\n"
+						"Inspired by the \"allPossibleImages\" program for BeOS R3 "
+						"by Douglas Irving Repetto"),
+						B_TRANSLATE("OK"));
+			if (toShow) {
+//				toShow->MoveTo(100, 100);
+				toShow->Go(NULL);
+			}
+			break;
+		}
+		default:
+			BView::MessageReceived(in);
+	};
+}
+
 void MatrixView::InitDotBitmaps() {
 	const int size = kDotSize;
 	BRect bounds(0, 0, size - 1, size - 1);
@@ -46,6 +88,7 @@ void MatrixView::InitDotBitmaps() {
 
 
 void MatrixView::AttachedToWindow() {
+	BView::AttachedToWindow();
 	LoadState();
 	InitBitPosSpiral();
 
@@ -83,6 +126,18 @@ void MatrixView::Draw(BRect) {
 }
 
 void MatrixView::MouseDown(BPoint where) {
+	
+	// Maybe I should open the context menu instead?..
+	BMessage* message = Window()->CurrentMessage();
+	int32 buttons;
+	if (message->FindInt32("buttons", &buttons) == B_OK) {
+		if (buttons & B_SECONDARY_MOUSE_BUTTON) {
+			_ShowContextMenu(where);
+			return;
+		}
+	}
+	
+	// Nah, it wasn't a right click. Let's continue with the boring stuff...
 	int x = where.x / kDotSpacing;
 	int y = where.y / kDotSpacing;
 	if (x >= kCols || y >= kRows) return;
@@ -112,12 +167,8 @@ void MatrixView::Pulse() {
         carry = _index[i] & 1;
     }
 
-	// DEBUGGING
-    printf("Tick: index[0] = %02X, gray[0] = %02X\n", _index[0], _gray[0]);
-
     Invalidate();
 }
-
 
 void MatrixView::SaveState() {
 	BFile file(_settingsPath.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
@@ -126,6 +177,9 @@ void MatrixView::SaveState() {
 
 	file.Write(_index, sizeof(_index));
 	file.Write(_user_mask, sizeof(_user_mask));
+	
+	// Save window position
+	file.Write(&winPos, sizeof(BPoint));
 }
 
 void MatrixView::LoadState() {
@@ -144,6 +198,21 @@ void MatrixView::LoadState() {
 	_gray[0] = _index[0];
 	for (int i = 1; i < 32; ++i)
 		_gray[i] = _index[i] ^ _index[i - 1];
+		
+	// Restore window position
+	BPoint winPos;
+	ssize_t readPos = file.Read(&winPos, sizeof(BPoint));
+	if (readPos == sizeof(BPoint) && Window()) {		
+		BScreen screen(Window());
+		BRect screenFrame = screen.Frame();
+
+		// If the window occurs outside of the screen view area,
+		// (for example, because the resolution has changed),
+		if (screenFrame.Contains(winPos))
+			Window()->MoveTo(winPos);
+		else
+			Window()->MoveTo(100, 100); // Move the window to origin
+	}
 }
 
 void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {
@@ -185,8 +254,8 @@ void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {
 }
 
 void MatrixView::InitBitPosSpiral() {
-	for (int x = 0; x < 8; ++x)
-		for (int y = 0; y < 8; ++y)
+	for (int x = 0; x < kCols; ++x)
+		for (int y = 0; y < kRows; ++y)
 			bit_pos[x][y] = -1;
 
 	int x = 4, y = 3;           // Starting point
@@ -202,9 +271,12 @@ void MatrixView::InitBitPosSpiral() {
 	while (bit < 64) {
 		for (int side = 0; side < 2; ++side) {
 			for (int i = 0; i < steps; ++i) {
-				if (x >= 0 && x < 8 && y >= 0 && y < 8 && bit_pos[x][y] == -1) {
+				if (x >= 0 && x < kCols && 
+					y >= 0 && y < kRows && 
+					bit_pos[x][y] == -1)
+				{
 					bit_pos[x][y] = bit++;
-					if (bit >= 64) break;
+					if (bit >= kRows * kCols) break;
 				}
 				x += dx[dir];
 				y += dy[dir];
@@ -214,16 +286,14 @@ void MatrixView::InitBitPosSpiral() {
 		steps++;
 	}
 
-	DumpBitPos(); // DEBUGGING
+// 	DumpBitPos(); // DEBUGGING - just a beautiful printout of the matrix :)
 }
-
-
 
 void MatrixView::DumpBitPos() {
 	printf("Bit position matrix (bit_pos[x][y]):\n");
 
-	for (int y = 0; y < 8; ++y) {
-		for (int x = 0; x < 8; ++x) {
+	for (int y = 0; y < kRows; ++y) {
+		for (int x = 0; x < kCols; ++x) {
 			if (bit_pos[x][y] >= 0)
 				printf("%3d ", bit_pos[x][y]);
 			else
@@ -233,3 +303,36 @@ void MatrixView::DumpBitPos() {
 	}
 }
 
+void MatrixView::_ShowContextMenu(BPoint point)
+{
+	ConvertToScreen(&point);
+
+	BPopUpMenu* menu = new BPopUpMenu("context_menu", false, false);
+	menu->SetAsyncAutoDestruct(true);
+
+	BMenuItem* settingsItem = new BMenuItem(B_TRANSLATE("⚙ Settings…"), 
+	                                        new BMessage(OPEN_PREFERENCES));
+	settingsItem->SetTarget(this);
+	menu->AddItem(settingsItem);
+	
+	BMenuItem* aboutItem = new BMenuItem(B_TRANSLATE("ℹ About"), 
+	                                     new BMessage(B_ABOUT_REQUESTED));
+	aboutItem->SetTarget(this);
+	menu->AddItem(aboutItem);
+
+	menu->Go(point, true, true, BRect(point - BPoint(4, 4), point + BPoint(4, 4)), true);
+}
+
+
+void MatrixView::_ShowSettingsWindow() {
+	BRect screenFrame = BScreen().Frame();
+	BRect winFrame(100, 100, 400, 300);
+
+	// Центрируем окно
+	winFrame.OffsetTo(
+		(screenFrame.Width() - winFrame.Width()) / 2,
+		(screenFrame.Height() - winFrame.Height()) / 2
+	);
+
+	new SettingsWindow(winFrame); // Само себя покажет
+}
