@@ -1,5 +1,5 @@
-#include "MatrixView.hpp"
-#include "SettingsWindow.hpp"
+#include "MatrixView.h"
+#include "SettingsWindow.h"
 
 #include <StorageDefs.h>
 #include <Catalog.h>

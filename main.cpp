@@ -1,6 +1,6 @@
 #include <Application.h>
 #include <Window.h>
-#include "MatrixView.hpp"
+#include "MatrixView.h"
 
 class GrayApp : public BApplication {
 public:

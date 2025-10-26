@@ -4,7 +4,7 @@
  */
 
 
-#include "SettingsWindow.hpp"
+#include "SettingsWindow.h"
 
 #include <View.h>
 #include <Button.h>
