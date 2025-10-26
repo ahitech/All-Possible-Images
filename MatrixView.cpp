@@ -47,6 +47,7 @@ void MatrixView::InitDotBitmaps() {
 
 void MatrixView::AttachedToWindow() {
 	LoadState();
+	InitBitPosSpiral();
 
 	// Setting Pulse() frequency
 	if (Window())
@@ -62,7 +63,8 @@ void MatrixView::Draw(BRect) {
 
 	for (int y = 0; y < kRows; ++y) {
 		for (int x = 0; x < kCols; ++x) {
-			int bitIndex = y * kCols + x;
+			int bitIndex = bit_pos[x][y];
+
 			int byteIndex = bitIndex / 8;
 			int bitOffset = bitIndex % 8;
 
@@ -80,21 +82,13 @@ void MatrixView::Draw(BRect) {
 	}
 }
 
-void MatrixView::DrawCircle(int x, int y, bool active) {
-	rgb_color color = active ? make_color(0, 0, 255) : make_color(64, 64, 64);
-	SetHighColor(color);
-
-	BRect r(x * kDotSpacing, y * kDotSpacing,
-			x * kDotSpacing + kDotSize, y * kDotSpacing + kDotSize);
-	FillEllipse(r);
-}
-
 void MatrixView::MouseDown(BPoint where) {
 	int x = where.x / kDotSpacing;
 	int y = where.y / kDotSpacing;
 	if (x >= kCols || y >= kRows) return;
 
-	int bitIndex = y * kCols + x;
+	int bitIndex = bit_pos[x][y];
+
 	int byteIndex = bitIndex / 8;
 	int bitOffset = bitIndex % 8;
 
@@ -187,6 +181,55 @@ void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {
 			px[2] = r;   // red
 			px[3] = 255; // alpha
 		}
+	}
+}
+
+void MatrixView::InitBitPosSpiral() {
+	for (int x = 0; x < 8; ++x)
+		for (int y = 0; y < 8; ++y)
+			bit_pos[x][y] = -1;
+
+	int x = 4, y = 3;           // Starting point
+	
+	// Clockwise spiral defining steps:
+	int dx[] = { 0, -1, 0, 1 };	// Stop, left, stop, right
+	int dy[] = { 1, 0, -1, 0 };	// Down, stop,   up, stop
+
+	int dir = 0;
+	int steps = 1;
+	int bit = 0;
+
+	while (bit < 64) {
+		for (int side = 0; side < 2; ++side) {
+			for (int i = 0; i < steps; ++i) {
+				if (x >= 0 && x < 8 && y >= 0 && y < 8 && bit_pos[x][y] == -1) {
+					bit_pos[x][y] = bit++;
+					if (bit >= 64) break;
+				}
+				x += dx[dir];
+				y += dy[dir];
+			}
+			dir = (dir + 1) % 4;
+		}
+		steps++;
+	}
+
+	DumpBitPos(); // DEBUGGING
+}
+
+
+
+void MatrixView::DumpBitPos() {
+	printf("Bit position matrix (bit_pos[x][y]):\n");
+
+	for (int y = 0; y < 8; ++y) {
+		for (int x = 0; x < 8; ++x) {
+			if (bit_pos[x][y] >= 0)
+				printf("%3d ", bit_pos[x][y]);
+			else
+				printf("  . ");
+		}
+		printf("\n");
 	}
 }
 

@@ -28,9 +28,11 @@ private:
 	void LoadState();
 	void SaveState();
 	
-	void DrawCircle(int x, int y, bool active);
 	void InitDotBitmaps();
 	void RenderDotGradient(BBitmap* bitmap, bool active);
+	
+	void InitBitPosSpiral();
+	void DumpBitPos();
 
 	uint8_t _index[32];       //!< Binary that is to be displayed
 	uint8_t _gray[32];        //!< Binary Gray code of "_index"
