@@ -1,10 +1,12 @@
 #ifndef MATRIX_VIEW_H
 #define MATRIX_VIEW_H
 
+#include <Archivable.h>
 #include <Bitmap.h>
-#include <View.h>
-#include <Path.h>
+#include <Dragger.h>
 #include <File.h>
+#include <Path.h>
+#include <View.h>
 #include <Window.h>
 
 
@@ -19,14 +21,18 @@ const uint32	OPEN_PREFERENCES = 'pref';
 class MatrixView : public BView {
 public:
 	MatrixView(BRect frame, const char* name);
+	MatrixView(BMessage* archive);
 	virtual ~MatrixView();
-
-	void AttachedToWindow() override;
+	
+	// Replication
+	static BArchivable* Instantiate(BMessage* archive);
+	virtual status_t Archive(BMessage* archive, bool deep = true) const override;
 	
 	//! The sole purpose of this function is to store window's position.
 	void DetachedFromWindow() override {
-		if (Window()) winPos = Window()->Frame().LeftTop();
+		if (Window()) _winPos = Window()->Frame().LeftTop();
 	}
+	void AttachedToWindow() override;
 	void Draw(BRect updateRect) override;
 	void MouseDown(BPoint where) override;
 	void Pulse() override;
@@ -69,8 +75,13 @@ private:
 	BBitmap* _dotActive;		//!< Active dot in the matrix
 	BBitmap* _dotInactive;		//!< Inactive dot in the matrix
 
+	BDragger* _dragger;			//!< Replicant dragger
+
 	BPath _settingsPath;
-	BPoint winPos;			//!< For saving and restoring window position
+	BPoint _winPos;			//!< For saving and restoring window position
+	
+	static void LogToFile(const char* format, ...);	//!< For replicant debugging
+	static void ClearLogFile();	//!< Delete the log file for replicant debugging
 };
 
 #endif
