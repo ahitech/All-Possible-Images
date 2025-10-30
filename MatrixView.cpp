@@ -25,6 +25,7 @@ const char* kLogFileName = "MatrixView.log";
 MatrixView::MatrixView(BRect frame, const char* name)
 	: 	BView(frame, name, B_FOLLOW_NONE, B_WILL_DRAW | B_PULSE_NEEDED),
 		_dragger(nullptr),
+		_isReplicant(false),
 		_winPos(100, 100)		// Default window position
 {
 	ClearLogFile();
@@ -46,8 +47,9 @@ MatrixView::MatrixView(BRect frame, const char* name)
 	SetLowColor(make_color(0, 0, 0));
 }
 
-MatrixView::MatrixView(BMessage* archive)
+MatrixView::MatrixView(BMessage* archive, bool isReplicant = false)
 	:	BView(archive),
+		_isReplicant(isReplicant),
 		_dragger(nullptr),
 		_winPos(100, 100)
 {
@@ -87,7 +89,7 @@ BArchivable* MatrixView::Instantiate(BMessage *archive) {
 		return (nullptr);
 	}
 	MatrixView::LogToFile("> Going to call the constructor from BMessage...\n");
-	return new MatrixView(archive);
+	return new MatrixView(archive, true);
 }
 
 status_t MatrixView::Archive(BMessage* archive, bool deep) const {
@@ -181,9 +183,16 @@ void MatrixView::AttachedToWindow() {
 }
 
 void MatrixView::Draw(BRect) {
-	SetDrawingMode(B_OP_COPY);
-	SetHighColor(0, 0, 0, 0);
-	FillRect(Bounds());			// Clearing the background
+//	SetDrawingMode(B_OP_COPY);
+	if (!_isReplicant) {
+		SetHighColor(0, 0, 0, 0);
+		FillRect(Bounds());			// Clearing the background
+	} else {
+//		SetViewColor(B_TRANSPARENT_COLOR);
+//		SetLowColor(B_TRANSPARENT_COLOR);
+//		SetHighColor(B_TRANSPARENT_COLOR);
+	}
+
 	
 	SetDrawingMode(B_OP_ALPHA); // Using alpha channels for transparency
 
@@ -254,15 +263,21 @@ void MatrixView::Pulse() {
 }
 
 void MatrixView::SaveState() {
+	static BLocker saveLock("SaveStateLock");
 	BFile file(_settingsPath.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
 	if (file.InitCheck() != B_OK)
 		return;
 
+	saveLock.Lock();
 	file.Write(_index, sizeof(_index));
 	file.Write(_user_mask, sizeof(_user_mask));
 	
-	// Save window position
-	file.Write(&_winPos, sizeof(BPoint));
+	if (!_isReplicant) {
+		// Save window position
+		file.Write(&_winPos, sizeof(BPoint));
+	}
+
+	saveLock.Unlock();
 }
 
 void MatrixView::LoadState() {
@@ -298,7 +313,8 @@ void MatrixView::LoadState() {
 		if (screenFrame.Contains(_winPos))
 			Window()->MoveTo(_winPos);
 		else
-			Window()->MoveTo(100, 100); // Move the window to origin
+			if (!_isReplicant)	// Only if the instance is NOT a replicant
+				Window()->MoveTo(100, 100); // Move the window to origin
 	}
 	MatrixView::LogToFile("< Exitting LoadState()\n");
 }
@@ -372,10 +388,11 @@ void MatrixView::InitBitPosSpiral() {
 		steps++;
 	}
 
-// 	DumpBitPos(); // DEBUGGING - just a beautiful printout of the matrix :)
+ 	DumpBitPos(); // DEBUGGING - just a beautiful printout of the matrix :)
 }
 
 void MatrixView::DumpBitPos() {
+#ifdef _DEBUG_PRINTOUTS
 	printf("Bit position matrix (bit_pos[x][y]):\n");
 
 	for (int y = 0; y < kRows; ++y) {
@@ -387,6 +404,7 @@ void MatrixView::DumpBitPos() {
 		}
 		printf("\n");
 	}
+#endif // _DEBUG_PRINTOUTS	
 }
 
 void MatrixView::_ShowContextMenu(BPoint point)
@@ -424,6 +442,7 @@ void MatrixView::_ShowSettingsWindow() {
 }
 
 void MatrixView::LogToFile(const char* format, ...) {
+#ifdef _DEBUG_PRINTOUTS
 	static BLocker logLock("MatrixViewLogLock");
 	BPath path;
 	if (find_directory(B_USER_DIRECTORY, &path) == B_OK) {
@@ -441,6 +460,7 @@ void MatrixView::LogToFile(const char* format, ...) {
 			logLock.Unlock();
 		}
 	}
+#endif	// _DEBUG_PRINTOUTS
 }
 
 void MatrixView::ClearLogFile() {

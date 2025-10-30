@@ -16,12 +16,17 @@ const int kDotSize = 16;
 const int kDotSpacing = 20;
 const bigtime_t kUpdateInterval = 100000; // 0.1s
 
+//! The following #define, if not commented out, allows the program
+//	to perform debugging printouts into a file in the user ~ directory.
+// 	Keep it commented out to prevent unnecessary disk access.
+//  #define _DEBUG_PRINTOUTS
+
 const uint32	OPEN_PREFERENCES = 'pref';
 
 class MatrixView : public BView {
 public:
 	MatrixView(BRect frame, const char* name);
-	MatrixView(BMessage* archive);
+	MatrixView(BMessage* archive, bool isReplicant = false);
 	virtual ~MatrixView();
 	
 	// Replication
@@ -79,6 +84,7 @@ private:
 
 	BPath _settingsPath;
 	BPoint _winPos;			//!< For saving and restoring window position
+	bool   _isReplicant;	//!< A replicant does not restore window position
 	
 	static void LogToFile(const char* format, ...);	//!< For replicant debugging
 	static void ClearLogFile();	//!< Delete the log file for replicant debugging
