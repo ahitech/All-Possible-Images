@@ -33,6 +33,8 @@ APP_MIME_SIG = application/x-vnd.hitech.allPossibleImages
 #	Also note that spaces in folder names do not work well with this Makefile.
 SRCS =  MatrixView.cpp \
 		SettingsWindow.cpp \
+		ColorPickerWindow.cpp \
+		ColorButton.cpp \
 		main.cpp
 
 #	Specify the resource definition files to use. Full or relative paths can be
@@ -92,14 +94,14 @@ OPTIMIZE := NONE
 # 	will recreate only the "locales/en.catkeys" file. Use it as a template
 # 	for creating catkeys for other languages. All localization files must be
 # 	placed in the "locales" subdirectory.
-LOCALES = en ru
+LOCALES = en ru eo
 
 #	Specify all the preprocessor symbols to be defined. The symbols will not
 #	have their values set automatically; you must supply the value (if any) to
 #	use. For example, setting DEFINES to "DEBUG=1" will cause the compiler
 #	option "-DDEBUG=1" to be used. Setting DEFINES to "DEBUG" would pass
 #	"-DDEBUG" on the compiler's command line.
-DEFINES =
+DEFINES = _DEBUG_PRINTOUTS=1	
 
 #	Specify the warning level. Either NONE (suppress all warnings),
 #	ALL (enable all warnings), or leave blank (enable default warnings).

@@ -12,12 +12,14 @@
 #include <Screen.h>
 #include <MenuItem.h>
 #include <Alert.h>
+#include <TranslationUtils.h>
 
 #include <iostream>
 #include <math.h> // For gradients
 #include <string.h>
 
 const char* kLogFileName = "MatrixView.log";
+const uint	kDraggerSize = 7; 	// By default, BDragger is 7x7 pixels 
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MatrixView"
@@ -116,9 +118,11 @@ status_t MatrixView::Archive(BMessage* archive, bool deep) const {
 	return toReturn;
 }
 
-void MatrixView::MessageReceived(BMessage* in) {	
+void MatrixView::MessageReceived(BMessage* in) {
+	MatrixView::LogToFile("Message received!\n");
 	switch (in->what) {
-		case ('asdb'): {
+		case (MESSAGE_RELEASED):
+		{
 			MatrixView::LogToFile("> Got replicant drag message");
 		
 			BPath path;
@@ -128,7 +132,8 @@ void MatrixView::MessageReceived(BMessage* in) {
 			BFile file(path.Path(), 
 						B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
 			if (file.InitCheck() == B_OK)
-				in->Flatten(&file);  // сохрани весь BMessage на диск
+				in->Flatten(&file);  // Save BMessage to hard drive
+			break;
 		}
 		case OPEN_PREFERENCES:		
 		{
@@ -174,8 +179,13 @@ void MatrixView::AttachedToWindow() {
 	// Setting Pulse() frequency
 	if (Window())
 		Window()->SetPulseRate(kUpdateInterval);
-		
-	_dragger = new BDragger(this->Frame(), 
+	
+	BRect draggerFrame(Bounds().right - kDraggerSize,
+	                   Bounds().bottom - kDraggerSize,
+	                   Bounds().right,
+	                   Bounds().bottom);
+	
+	_dragger = new BDragger(draggerFrame, 
 							this,
 							B_FOLLOW_RIGHT | B_FOLLOW_BOTTOM);
 	AddChild(_dragger);
@@ -183,14 +193,16 @@ void MatrixView::AttachedToWindow() {
 }
 
 void MatrixView::Draw(BRect) {
-//	SetDrawingMode(B_OP_COPY);
+	SetDrawingMode(B_OP_COPY);
 	if (!_isReplicant) {
 		SetHighColor(0, 0, 0, 0);
 		FillRect(Bounds());			// Clearing the background
 	} else {
-//		SetViewColor(B_TRANSPARENT_COLOR);
-//		SetLowColor(B_TRANSPARENT_COLOR);
-//		SetHighColor(B_TRANSPARENT_COLOR);
+/*		SetViewColor(B_TRANSPARENT_COLOR);
+		SetLowColor(B_TRANSPARENT_COLOR);
+		SetHighColor(B_TRANSPARENT_COLOR);
+		FillRect(Bounds());
+*/		
 	}
 
 	
@@ -218,18 +230,21 @@ void MatrixView::Draw(BRect) {
 }
 
 void MatrixView::MouseDown(BPoint where) {
+	MatrixView::LogToFile("> Entering MouseDown()\n");
 	
 	// Maybe I should open the context menu instead?..
 	BMessage* message = Window()->CurrentMessage();
 	int32 buttons;
 	if (message->FindInt32("buttons", &buttons) == B_OK) {
 		if (buttons & B_SECONDARY_MOUSE_BUTTON) {
+			MatrixView::LogToFile("\tShow context menu!\n");
 			_ShowContextMenu(where);
 			return;
 		}
 	}
 	
 	// Nah, it wasn't a right click. Let's continue with the boring stuff...
+	MatrixView::LogToFile("\tUser wants to modify the layout of dots\n");
 	int x = where.x / kDotSpacing;
 	int y = where.y / kDotSpacing;
 	if (x >= kCols || y >= kRows) return;
@@ -242,6 +257,7 @@ void MatrixView::MouseDown(BPoint where) {
 	_user_mask[byteIndex] ^= (1 << bitOffset);
 
 	Invalidate();
+	MatrixView::LogToFile("> Exitting MouseDown()\n");
 }
 
 void MatrixView::Pulse() {
@@ -310,11 +326,14 @@ void MatrixView::LoadState() {
 
 		// If the window occurs outside of the screen view area,
 		// (for example, because the resolution has changed),
-		if (screenFrame.Contains(_winPos))
+		if (screenFrame.Contains(_winPos) &&
+			!_isReplicant)
+		{
 			Window()->MoveTo(_winPos);
-		else
+		} else {
 			if (!_isReplicant)	// Only if the instance is NOT a replicant
 				Window()->MoveTo(100, 100); // Move the window to origin
+		}
 	}
 	MatrixView::LogToFile("< Exitting LoadState()\n");
 }
