@@ -394,16 +394,16 @@ void MatrixView::InitBitPosSpiral() {
 
 void MatrixView::DumpBitPos() {
 #ifdef _DEBUG_PRINTOUTS
-	printf("Bit position matrix (bit_pos[x][y]):\n");
+	MatrixView::LogToFile("Bit position matrix (bit_pos[x][y]):\n");
 
 	for (int y = 0; y < kRows; ++y) {
 		for (int x = 0; x < kCols; ++x) {
 			if (bit_pos[x][y] >= 0)
-				printf("%3d ", bit_pos[x][y]);
+				MatrixView::LogToFile("%3d ", bit_pos[x][y]);
 			else
-				printf("  . ");
+				MatrixView::LogToFile("  . ");
 		}
-		printf("\n");
+		MatrixView::LogToFile("\n");
 	}
 #endif // _DEBUG_PRINTOUTS	
 }
