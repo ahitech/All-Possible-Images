@@ -7,21 +7,27 @@
 #include <FindDirectory.h>
 #include <Entry.h>
 #include <Directory.h>
+#include <Locker.h>
 #include <PopUpMenu.h>
 #include <Screen.h>
 #include <MenuItem.h>
 #include <Alert.h>
+#include <TranslationUtils.h>
 
 #include <iostream>
 #include <math.h> // For gradients
 #include <string.h>
 
+const char* kLogFileName = "MatrixView.log";
+
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MatrixView"
 
 MatrixView::MatrixView(BRect frame, const char* name)
-	: BView(frame, name, B_FOLLOW_NONE, B_WILL_DRAW | B_PULSE_NEEDED),
-	winPos(100, 100)		// Default window position
+	:	BView(frame, name, B_FOLLOW_NONE, B_WILL_DRAW | B_PULSE_NEEDED),
+		_dragger(nullptr),
+		_isReplicant(false),
+		_winPos(100, 100)		// Default window position
 {
 	memset(_index, 0, sizeof(_index));
 	memset(_gray, 0, sizeof(_gray));
@@ -32,6 +38,7 @@ MatrixView::MatrixView(BRect frame, const char* name)
 	_dotInactive = nullptr;
 	// Prepare the bitmaps
 	InitDotBitmaps();
+	InitBitPosSpiral();
 
 	find_directory(B_USER_SETTINGS_DIRECTORY, &_settingsPath);
 	_settingsPath.Append("AllPossibleImages.dat");
@@ -40,15 +47,94 @@ MatrixView::MatrixView(BRect frame, const char* name)
 	SetLowColor(make_color(0, 0, 0));
 }
 
+MatrixView::MatrixView(BMessage* archive, bool isReplicant)
+	:	BView(archive),
+		_isReplicant(isReplicant),
+		_dragger(nullptr),
+		_winPos(100, 100)
+{
+	MatrixView::LogToFile("> In constructor from BMessage\n");
+	SetViewColor(B_TRANSPARENT_COLOR);
+	SetLowColor(make_color(0, 0, 0));
+	SetHighColor(0, 0, 255);
+	
+	memset(_index, 0, sizeof(_index));
+	memset(_gray, 0, sizeof(_gray));
+	memset(_user_mask, 0, sizeof(_user_mask));
+	
+	// Clearing the bitmaps before usage
+	_dotActive = nullptr;
+	_dotInactive = nullptr;
+	// Prepare the bitmaps
+	InitDotBitmaps();
+	InitBitPosSpiral();
+	
+	const char* string;
+	archive->FindString("settingsPath", 0, &string);
+	_settingsPath.SetTo(string);
+	MatrixView::LogToFile("\tSettings Path set to \'%s\'\n", _settingsPath.Path());
+	
+	LoadState();
+	MatrixView::LogToFile("< Constructor for BMessage finished\n");
+}
+
+
 MatrixView::~MatrixView() {
 	SaveState();
 	if (_dotActive) delete _dotActive;
 	if (_dotInactive) delete _dotInactive;
 }
 
+status_t MatrixView::Archive(BMessage* archive, bool deep) const {
+	MatrixView::LogToFile("> Entering Archive()\n");
+	status_t toReturn;
+	
+	if ((toReturn = BView::Archive(archive, deep)) != B_OK) {
+		return toReturn;
+	}
+	MatrixView::LogToFile("\tArchived BView\n");
+	
+	if ((toReturn = archive->AddString("add_on",
+			"application/x-vnd.hitech.allPossibleImages")) != B_OK) {
+		return toReturn;
+	}
+	MatrixView::LogToFile("\tAdded signature\n");
+	
+	if ((toReturn = archive->AddString("settingsPath",
+									_settingsPath.Path())) != B_OK) {
+		return toReturn;
+	}
+	MatrixView::LogToFile("\tAdded Settings Path\n");
+	MatrixView::LogToFile("< Exitting Archive()\n");
+	return toReturn;
+}
+
+BArchivable* MatrixView::Instantiate(BMessage *archive) {
+	MatrixView::LogToFile("> Instantiation\n");
+	if (!validate_instantiation(archive, "MatrixView")) {
+		return (nullptr);
+	}
+	MatrixView::LogToFile("> Going to call the constructor from BMessage...\n");
+	return new MatrixView(archive, true);
+}
+
 
 void MatrixView::MessageReceived(BMessage* in) {	
 	switch (in->what) {
+		case (MESSAGE_RELEASED):
+		{
+			MatrixView::LogToFile("> Got replicant drag message");
+		
+			BPath path;
+			find_directory(B_USER_DIRECTORY, &path);
+			path.Append("replicant_message.txt");
+		
+			BFile file(path.Path(), 
+						B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+			if (file.InitCheck() == B_OK)
+				in->Flatten(&file);  // Save BMessage to hard drive
+			break;
+		}
 		case OPEN_PREFERENCES:		
 		{
 			// DEBUGGING
@@ -65,7 +151,6 @@ void MatrixView::MessageReceived(BMessage* in) {
 						"by Douglas Irving Repetto"),
 						B_TRANSLATE("OK"));
 			if (toShow) {
-//				toShow->MoveTo(100, 100);
 				toShow->Go(NULL);
 			}
 			break;
@@ -88,9 +173,13 @@ void MatrixView::InitDotBitmaps() {
 
 
 void MatrixView::AttachedToWindow() {
+	MatrixView::LogToFile("> Entering AttachedToWindow()\n");
 	BView::AttachedToWindow();
 	LoadState();
-	InitBitPosSpiral();
+	
+	_dragger = new BDragger(this->Frame(), 
+						this,
+						B_FOLLOW_RIGHT | B_FOLLOW_BOTTOM);
 
 	// Setting Pulse() frequency
 	if (Window())
@@ -179,7 +268,7 @@ void MatrixView::SaveState() {
 	file.Write(_user_mask, sizeof(_user_mask));
 	
 	// Save window position
-	file.Write(&winPos, sizeof(BPoint));
+	file.Write(&_winPos, sizeof(BPoint));
 }
 
 void MatrixView::LoadState() {
@@ -199,19 +288,24 @@ void MatrixView::LoadState() {
 	for (int i = 1; i < 32; ++i)
 		_gray[i] = _index[i] ^ _index[i - 1];
 		
-	// Restore window position
-	BPoint winPos;
-	ssize_t readPos = file.Read(&winPos, sizeof(BPoint));
-	if (readPos == sizeof(BPoint) && Window()) {		
-		BScreen screen(Window());
-		BRect screenFrame = screen.Frame();
-
-		// If the window occurs outside of the screen view area,
-		// (for example, because the resolution has changed),
-		if (screenFrame.Contains(winPos))
-			Window()->MoveTo(winPos);
-		else
-			Window()->MoveTo(100, 100); // Move the window to origin
+	// Restore window position - only if the instance is not a replicant
+	if (! _isReplicant) {
+		BPoint winPos;
+		ssize_t readPos = file.Read(&winPos, sizeof(BPoint));
+		if (readPos == sizeof(BPoint) && Window()) {		
+			BScreen screen(Window());
+			BRect screenFrame = screen.Frame();
+	
+			// If the window occurs outside of the screen view area,
+			// (for example, because the resolution has changed),
+			if (screenFrame.Contains(winPos)) {
+				Window()->MoveTo(winPos);
+				_winPos = winPos;
+			} else {
+				Window()->MoveTo(100, 100); // Move the window to origin
+				// winPos is already initialized to (100, 100)
+			}
+		}
 	}
 }
 
@@ -335,4 +429,35 @@ void MatrixView::_ShowSettingsWindow() {
 	);
 
 	new SettingsWindow(winFrame); // Само себя покажет
+}
+
+
+void MatrixView::LogToFile(const char* format, ...) {
+#ifdef _DEBUG_PRINTOUTS
+	static BLocker logLock("MatrixViewLogLock");
+	BPath path;
+	if (find_directory(B_USER_DIRECTORY, &path) == B_OK) {
+		path.Append(kLogFileName);
+		
+		if (!logLock.Lock()) return; // Did not succeed to lock the file
+		FILE* f = fopen(path.Path(), "a");
+		if (f) {
+			va_list args;
+			va_start(args, format);
+			vfprintf(f, format, args);
+			fprintf(f, "\n");
+			va_end(args);
+			fclose(f);
+			logLock.Unlock();
+		}
+	}
+#endif	// _DEBUG_PRINTOUTS
+}
+
+void MatrixView::ClearLogFile() {
+	BPath path;
+	if (find_directory(B_USER_DIRECTORY, &path) == B_OK) {
+		path.Append(kLogFileName);
+		remove(path.Path());
+	}
 }
