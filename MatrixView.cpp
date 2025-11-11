@@ -24,11 +24,13 @@ const char* kLogFileName = "MatrixView.log";
 #define B_TRANSLATION_CONTEXT "MatrixView"
 
 MatrixView::MatrixView(BRect frame, const char* name)
-	:	BView(frame, name, B_FOLLOW_NONE, B_WILL_DRAW | B_PULSE_NEEDED),
+	: 	BView(frame, name, B_FOLLOW_NONE, B_WILL_DRAW | B_PULSE_NEEDED),
 		_dragger(nullptr),
 		_isReplicant(false),
 		_winPos(100, 100)		// Default window position
 {
+	ClearLogFile();
+
 	memset(_index, 0, sizeof(_index));
 	memset(_gray, 0, sizeof(_gray));
 	memset(_user_mask, 0, sizeof(_user_mask));
@@ -119,7 +121,8 @@ BArchivable* MatrixView::Instantiate(BMessage *archive) {
 }
 
 
-void MatrixView::MessageReceived(BMessage* in) {	
+void MatrixView::MessageReceived(BMessage* in) {
+	MatrixView::LogToFile("Message received!\n");
 	switch (in->what) {
 		case (MESSAGE_RELEASED):
 		{
@@ -137,8 +140,6 @@ void MatrixView::MessageReceived(BMessage* in) {
 		}
 		case OPEN_PREFERENCES:		
 		{
-			// DEBUGGING
-			printf ("Trying to show the settings...\n");
 			_ShowSettingsWindow();
 			break;
 		}
@@ -149,7 +150,8 @@ void MatrixView::MessageReceived(BMessage* in) {
 						"By Alexey \"Hitech\" Burshtein\nVersion 1.0\n\n"
 						"Inspired by the \"allPossibleImages\" program for BeOS R3 "
 						"by Douglas Irving Repetto"),
-						B_TRANSLATE("OK"));
+						B_TRANSLATE("OK"), NULL, NULL, B_WIDTH_AS_USUAL,
+						B_INFO_ALERT);
 			if (toShow) {
 				toShow->Go(NULL);
 			}
@@ -176,10 +178,10 @@ void MatrixView::AttachedToWindow() {
 	MatrixView::LogToFile("> Entering AttachedToWindow()\n");
 	BView::AttachedToWindow();
 	LoadState();
-	
+
 	_dragger = new BDragger(this->Frame(), 
-						this,
-						B_FOLLOW_RIGHT | B_FOLLOW_BOTTOM);
+							this,
+							B_FOLLOW_RIGHT | B_FOLLOW_BOTTOM);
 
 	// Setting Pulse() frequency
 	if (Window())
@@ -188,8 +190,8 @@ void MatrixView::AttachedToWindow() {
 
 void MatrixView::Draw(BRect) {
 	SetDrawingMode(B_OP_COPY);
-	SetHighColor(0, 0, 0, 0);
-	FillRect(Bounds());			// Clearing the background
+		SetHighColor(0, 0, 0, 0);
+		FillRect(Bounds());			// Clearing the background
 	
 	SetDrawingMode(B_OP_ALPHA); // Using alpha channels for transparency
 
@@ -215,18 +217,21 @@ void MatrixView::Draw(BRect) {
 }
 
 void MatrixView::MouseDown(BPoint where) {
+	MatrixView::LogToFile("> Entering MouseDown()\n");
 	
 	// Maybe I should open the context menu instead?..
 	BMessage* message = Window()->CurrentMessage();
 	int32 buttons;
 	if (message->FindInt32("buttons", &buttons) == B_OK) {
 		if (buttons & B_SECONDARY_MOUSE_BUTTON) {
+			MatrixView::LogToFile("\tShow context menu!\n");
 			_ShowContextMenu(where);
 			return;
 		}
 	}
 	
 	// Nah, it wasn't a right click. Let's continue with the boring stuff...
+	MatrixView::LogToFile("\tUser wants to modify the layout of dots\n");
 	int x = where.x / kDotSpacing;
 	int y = where.y / kDotSpacing;
 	if (x >= kCols || y >= kRows) return;
@@ -239,6 +244,7 @@ void MatrixView::MouseDown(BPoint where) {
 	_user_mask[byteIndex] ^= (1 << bitOffset);
 
 	Invalidate();
+	MatrixView::LogToFile("> Exitting MouseDown()\n");
 }
 
 void MatrixView::Pulse() {
@@ -260,18 +266,25 @@ void MatrixView::Pulse() {
 }
 
 void MatrixView::SaveState() {
+	static BLocker saveLock("SaveStateLock");
 	BFile file(_settingsPath.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
 	if (file.InitCheck() != B_OK)
 		return;
 
+	saveLock.Lock();
 	file.Write(_index, sizeof(_index));
 	file.Write(_user_mask, sizeof(_user_mask));
 	
-	// Save window position
-	file.Write(&_winPos, sizeof(BPoint));
+	if (!_isReplicant) {
+		// Save window position
+		file.Write(&_winPos, sizeof(BPoint));
+	}
+
+	saveLock.Unlock();
 }
 
 void MatrixView::LoadState() {
+	MatrixView::LogToFile("> Entering LoadState()\n");
 	BFile file(_settingsPath.Path(), B_READ_ONLY);
 	if (file.InitCheck() != B_OK)
 		return;
@@ -288,38 +301,34 @@ void MatrixView::LoadState() {
 	for (int i = 1; i < 32; ++i)
 		_gray[i] = _index[i] ^ _index[i - 1];
 		
-	// Restore window position - only if the instance is not a replicant
-	if (! _isReplicant) {
-		BPoint winPos;
-		ssize_t readPos = file.Read(&winPos, sizeof(BPoint));
-		if (readPos == sizeof(BPoint) && Window()) {		
-			BScreen screen(Window());
-			BRect screenFrame = screen.Frame();
-	
-			// If the window occurs outside of the screen view area,
-			// (for example, because the resolution has changed),
-			if (screenFrame.Contains(winPos)) {
-				Window()->MoveTo(winPos);
-				_winPos = winPos;
-			} else {
+	// Restore window position
+	ssize_t readPos = file.Read(&_winPos, sizeof(BPoint));
+	if (readPos == sizeof(BPoint) && Window()) {		
+		BScreen screen(Window());
+		BRect screenFrame = screen.Frame();
+		
+		MatrixView::LogToFile("\tWinPos is (%.2f, %.2f)\n", _winPos.x, _winPos.y);
+
+		// If the window occurs outside of the screen view area,
+		// (for example, because the resolution has changed),
+		if (screenFrame.Contains(_winPos))
+			Window()->MoveTo(_winPos);
+		else
+			if (!_isReplicant)	// Only if the instance is NOT a replicant
 				Window()->MoveTo(100, 100); // Move the window to origin
-				// winPos is already initialized to (100, 100)
-			}
-		}
 	}
+	MatrixView::LogToFile("< Exitting LoadState()\n");
 }
 
-void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {
+void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {	
 	uint8* bits = (uint8*)bitmap->Bits();
 	int32 bpr = bitmap->BytesPerRow();
 	const int size = kDotSize;
 	const int radius = kDotSize / 2;
 
-
 	rgb_color center = active ? make_color(60, 60, 255) : make_color(0, 0, 0);
 	rgb_color edge   = active ? make_color(0, 0, 120) : make_color(64, 64, 64);
 
-	
 	for (int y = 0; y < size; ++y) {
 		for (int x = 0; x < size; ++x) {
 			float dx = x - radius + 0.5f;
@@ -380,10 +389,11 @@ void MatrixView::InitBitPosSpiral() {
 		steps++;
 	}
 
-// 	DumpBitPos(); // DEBUGGING - just a beautiful printout of the matrix :)
+ 	DumpBitPos(); // DEBUGGING - just a beautiful printout of the matrix :)
 }
 
 void MatrixView::DumpBitPos() {
+#ifdef _DEBUG_PRINTOUTS
 	printf("Bit position matrix (bit_pos[x][y]):\n");
 
 	for (int y = 0; y < kRows; ++y) {
@@ -395,6 +405,7 @@ void MatrixView::DumpBitPos() {
 		}
 		printf("\n");
 	}
+#endif // _DEBUG_PRINTOUTS	
 }
 
 void MatrixView::_ShowContextMenu(BPoint point)
@@ -430,7 +441,6 @@ void MatrixView::_ShowSettingsWindow() {
 
 	new SettingsWindow(winFrame); // Само себя покажет
 }
-
 
 void MatrixView::LogToFile(const char* format, ...) {
 #ifdef _DEBUG_PRINTOUTS
