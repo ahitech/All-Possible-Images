@@ -63,7 +63,8 @@ RDEFS = allPossibleImages.rdef
 #		(e.g. for mylib.a, specify "mylib.a" or "path/mylib.a")
 LIBS =  be \
 		translation \
-		localestub
+		localestub	\
+		stdc++
 
 #	Specify additional paths to directories following the standard libXXX.so
 #	or libXXX.a naming scheme. You can specify full paths or paths relative

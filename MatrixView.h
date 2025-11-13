@@ -8,12 +8,13 @@
 #include <Path.h>
 #include <View.h>
 #include <Window.h>
-
+#include <iostream>
 
 const int kRows = 8;
 const int kCols = 8;
 const int kDotSize = 16;
 const int kDotSpacing = 20;
+const uint	kDraggerSize = 7; 	// By default, BDragger is 7x7 pixels 
 const bigtime_t kUpdateInterval = 100000; // 0.1s
 
 //! The following #define, if not commented out, allows the program
@@ -34,19 +35,20 @@ public:
 	static BArchivable* Instantiate(BMessage* archive);
 	virtual status_t Archive(BMessage* archive, bool deep = true) const override;
 	
-	//! The sole purpose of this function is to store window's position.
-	void DetachedFromWindow() override {
-		if (Window()) _winPos = Window()->Frame().LeftTop();
-	}
 	void AttachedToWindow() override;
 	void Draw(BRect updateRect) override;
 	void MouseDown(BPoint where) override;
 	void Pulse() override;
 	void MessageReceived(BMessage* in) override;
+	
+	void SaveState();	// When application quits, the StateSave() function is called first
+	bool IsReplicant() const {
+		return this->_isReplicant;
+	}
+	void SaveNewPosition(BPoint point);
 
 private:
 	void LoadState();
-	void SaveState();
 	
 	void InitDotBitmaps();
 	void RenderDotGradient(BBitmap* bitmap, bool active);

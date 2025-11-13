@@ -19,7 +19,6 @@
 #include <string.h>
 
 const char* kLogFileName = "MatrixView.log";
-const uint	kDraggerSize = 7; 	// By default, BDragger is 7x7 pixels 
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MatrixView"
@@ -119,11 +118,10 @@ status_t MatrixView::Archive(BMessage* archive, bool deep) const {
 }
 
 void MatrixView::MessageReceived(BMessage* in) {
-	MatrixView::LogToFile("Message received!\n");
 	switch (in->what) {
 		case (MESSAGE_RELEASED):
 		{
-			MatrixView::LogToFile("> Got replicant drag message");
+			MatrixView::LogToFile("> Got replicant drag message\n");
 		
 			BPath path;
 			find_directory(B_USER_DIRECTORY, &path);
@@ -137,11 +135,13 @@ void MatrixView::MessageReceived(BMessage* in) {
 		}
 		case OPEN_PREFERENCES:		
 		{
+			MatrixView::LogToFile("> Got request to show settings window\n");
 			_ShowSettingsWindow();
 			break;
 		}
 		case B_ABOUT_REQUESTED:
 		{
+			MatrixView::LogToFile("> Got request to show \"About\" window\n");
 			BAlert* toShow = new BAlert(B_TRANSLATE("About the program"),
 						B_TRANSLATE("All Possible Images for Haiku OS\n"
 						"By Alexey \"Hitech\" Burshtein\nVersion 1.0\n\n"
@@ -197,16 +197,15 @@ void MatrixView::Draw(BRect) {
 	if (!_isReplicant) {
 		SetHighColor(0, 0, 0, 0);
 		FillRect(Bounds());			// Clearing the background
-	} else {
-/*		SetViewColor(B_TRANSPARENT_COLOR);
-		SetLowColor(B_TRANSPARENT_COLOR);
-		SetHighColor(B_TRANSPARENT_COLOR);
-		FillRect(Bounds());
-*/		
 	}
-
 	
 	SetDrawingMode(B_OP_ALPHA); // Using alpha channels for transparency
+	if (_isReplicant) {
+		SetLowColor(B_TRANSPARENT_COLOR);
+		SetViewColor(B_TRANSPARENT_COLOR);
+		SetHighColor(B_TRANSPARENT_COLOR);
+		FillRect(Bounds());	
+	}
 
 	for (int y = 0; y < kRows; ++y) {
 		for (int x = 0; x < kCols; ++x) {
@@ -220,8 +219,8 @@ void MatrixView::Draw(BRect) {
 			bool visible = gray ^ user;
 
 			BBitmap* dot = visible ? _dotActive : _dotInactive;
-			BPoint topLeft(x * kDotSpacing + (kDotSpacing - kDotSize)/2,
-						   y * kDotSpacing + (kDotSpacing - kDotSize)/2);
+			BPoint topLeft(x * kDotSpacing + (kDotSpacing - kDotSize + kDraggerSize)/2,
+						   y * kDotSpacing + (kDotSpacing - kDotSize + kDraggerSize)/2);
 
 			// Output
 			DrawBitmap(dot, topLeft);
@@ -279,21 +278,32 @@ void MatrixView::Pulse() {
 }
 
 void MatrixView::SaveState() {
+	MatrixView::LogToFile("> Entering SaveState()\n");
 	static BLocker saveLock("SaveStateLock");
 	BFile file(_settingsPath.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
-	if (file.InitCheck() != B_OK)
+	if (file.InitCheck() != B_OK) {
 		return;
+	} else {
+		MatrixView::LogToFile("\tSettings file initialized correctly\n");
+	}
 
 	saveLock.Lock();
 	file.Write(_index, sizeof(_index));
+	MatrixView::LogToFile("\tWrote index = 0x%016X\n", _index);
 	file.Write(_user_mask, sizeof(_user_mask));
+	MatrixView::LogToFile("\tWrote user mask = 0x%016X\n", _user_mask);
 	
 	if (!_isReplicant) {
 		// Save window position
+		MatrixView::LogToFile("\tSaving window position as (%.2f, %.2f)\n",
+			_winPos.x, _winPos.y);
 		file.Write(&_winPos, sizeof(BPoint));
+	} else {
+		MatrixView::LogToFile("\tThis window is a replicant!\n");
 	}
 
 	saveLock.Unlock();
+	MatrixView::LogToFile("> Exitting SaveState()\n");
 }
 
 void MatrixView::LoadState() {
@@ -317,35 +327,46 @@ void MatrixView::LoadState() {
 		_gray[i] = _index[i] ^ _index[i - 1];
 		
 	// Restore window position
-	ssize_t readPos = file.Read(&_winPos, sizeof(BPoint));
-	if (readPos == sizeof(BPoint) && Window()) {		
-		BScreen screen(Window());
-		BRect screenFrame = screen.Frame();
-		
-		MatrixView::LogToFile("\tWinPos is (%.2f, %.2f)\n", _winPos.x, _winPos.y);
-
-		// If the window occurs outside of the screen view area,
-		// (for example, because the resolution has changed),
-		if (screenFrame.Contains(_winPos) &&
-			!_isReplicant)
-		{
-			Window()->MoveTo(_winPos);
-		} else {
-			if (!_isReplicant)	// Only if the instance is NOT a replicant
+	if (!_isReplicant) {
+		ssize_t readPos = file.Read(&_winPos, sizeof(BPoint));
+		if (readPos == sizeof(BPoint) && Window()) {		
+			BScreen screen(Window());
+			BRect screenFrame = screen.Frame();
+			
+			MatrixView::LogToFile("\tWinPos from file is (%.2f, %.2f)\n",
+				_winPos.x, _winPos.y);
+	
+			// If the window occurs outside of the screen view area,
+			// (for example, because the resolution has changed),
+			if (screenFrame.Contains(_winPos))
+			{
+				MatrixView::LogToFile("\tMoving the window to (%.2f, %.2f)\n",
+					_winPos.x, _winPos.y);
+				Window()->MoveTo(_winPos);
+			} else {
+				MatrixView::LogToFile("\tMoving the window to (100, 100)\n");
 				Window()->MoveTo(100, 100); // Move the window to origin
+			}
 		}
 	}
 	MatrixView::LogToFile("< Exitting LoadState()\n");
 }
 
-void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {	
+void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {
 	uint8* bits = (uint8*)bitmap->Bits();
 	int32 bpr = bitmap->BytesPerRow();
 	const int size = kDotSize;
 	const int radius = kDotSize / 2;
+	
+	LogToFile("> Entering RenderDotGradient()\n");
 
 	rgb_color center = active ? make_color(60, 60, 255) : make_color(0, 0, 0);
 	rgb_color edge   = active ? make_color(0, 0, 120) : make_color(64, 64, 64);
+	
+	LogToFile("\t%s -> Center: (%d, %d, %d), Edge: (%d, %d, %d)\n",
+		active ? "Active dot" : "Inactive dot",
+		center.red, center.green, center.blue,
+		edge.red, edge.green, edge.blue);
 
 	for (int y = 0; y < size; ++y) {
 		for (int x = 0; x < size; ++x) {
@@ -372,6 +393,7 @@ void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {
 			px[3] = 255; // alpha
 		}
 	}
+	LogToFile("> Exitting RenderDotGradient()\n");
 }
 
 void MatrixView::InitBitPosSpiral() {
@@ -412,16 +434,16 @@ void MatrixView::InitBitPosSpiral() {
 
 void MatrixView::DumpBitPos() {
 #ifdef _DEBUG_PRINTOUTS
-	printf("Bit position matrix (bit_pos[x][y]):\n");
+	LogToFile("Bit position matrix (bit_pos[x][y]):\n");
 
 	for (int y = 0; y < kRows; ++y) {
 		for (int x = 0; x < kCols; ++x) {
 			if (bit_pos[x][y] >= 0)
-				printf("%3d ", bit_pos[x][y]);
+				LogToFile("%3d ", bit_pos[x][y]);
 			else
-				printf("  . ");
+				LogToFile("  . ");
 		}
-		printf("\n");
+		LogToFile("\n");
 	}
 #endif // _DEBUG_PRINTOUTS	
 }
@@ -451,13 +473,13 @@ void MatrixView::_ShowSettingsWindow() {
 	BRect screenFrame = BScreen().Frame();
 	BRect winFrame(100, 100, 400, 300);
 
-	// Центрируем окно
+	// Centering the window
 	winFrame.OffsetTo(
 		(screenFrame.Width() - winFrame.Width()) / 2,
 		(screenFrame.Height() - winFrame.Height()) / 2
 	);
 
-	new SettingsWindow(winFrame); // Само себя покажет
+	new SettingsWindow(winFrame); // It will be loaded and shown by itself
 }
 
 void MatrixView::LogToFile(const char* format, ...) {
@@ -467,13 +489,13 @@ void MatrixView::LogToFile(const char* format, ...) {
 	if (find_directory(B_USER_DIRECTORY, &path) == B_OK) {
 		path.Append(kLogFileName);
 		
-		if (!logLock.Lock()) return; // Не удалось захватить мьютекс — выходим
+		if (!logLock.Lock()) return; // Could not take a mutex
 		FILE* f = fopen(path.Path(), "a");
 		if (f) {
 			va_list args;
 			va_start(args, format);
 			vfprintf(f, format, args);
-			fprintf(f, "\n");
+//			fprintf(f, "\n");
 			va_end(args);
 			fclose(f);
 			logLock.Unlock();
@@ -488,4 +510,10 @@ void MatrixView::ClearLogFile() {
 		path.Append(kLogFileName);
 		remove(path.Path());
 	}
+}
+
+void MatrixView::SaveNewPosition(BPoint point) {
+	_winPos = point;
+	MatrixView::LogToFile("> SaveNewPosition(). New origin is (%.2f, %.2f)\n",
+						_winPos.x, _winPos.y);
 }
