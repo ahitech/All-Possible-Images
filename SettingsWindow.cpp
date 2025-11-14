@@ -39,9 +39,10 @@ SettingsWindow::SettingsWindow(BRect frame)
 		B_TRANSLATE("Background Color"), fBackgroundColor);
 	BCheckBox* transparentCheckbox = new BCheckBox("TransparentCheckbox",
 		B_TRANSLATE("Transparent background for replicant"), nullptr);
+	transparentCheckbox->SetValue(true);
 
 	BLayoutBuilder::Group<>(backgroundBox, B_VERTICAL, 5)
-		.SetInsets(10)
+		.SetInsets(15, 20, 15, 5)
 		.Add(bgColorButton)
 		.Add(transparentCheckbox);
 
@@ -63,7 +64,7 @@ SettingsWindow::SettingsWindow(BRect frame)
 		B_TRANSLATE("Edge Color"), fActiveEdgeColor);
 
 	BLayoutBuilder::Group<>(activeBox, B_VERTICAL, 5)
-		.SetInsets(10)
+		.SetInsets(15, 20, 15, 10)
 		.Add(fActiveCenterButton)
 		.Add(fActiveEdgeButton);
 
@@ -77,7 +78,7 @@ SettingsWindow::SettingsWindow(BRect frame)
 		B_TRANSLATE("Edge Color"), fInactiveEdgeColor);
 
 	BLayoutBuilder::Group<>(inactiveBox, B_VERTICAL, 5)
-		.SetInsets(10)
+		.SetInsets(15, 20, 15, 10)
 		.Add(fInactiveCenterButton)
 		.Add(fInactiveEdgeButton);
 
