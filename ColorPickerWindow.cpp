@@ -52,7 +52,7 @@ void ColorPickerWindow::MessageReceived(BMessage* message) {
 	switch (message->what) {
 		case 'aply': {
 			rgb_color selected = fColorControl->ValueAsColor();
-			BMessage* toSend = new BMessage('colr');
+			BMessage* toSend = new BMessage(SEND_COLOR_TO_BUTTON);
 			toSend->AddData("color",
 						B_RGB_COLOR_TYPE,
 						&selected,

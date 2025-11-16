@@ -12,7 +12,6 @@
 
 const int kRows = 8;
 const int kCols = 8;
-const int kDotSize = 16;
 const int kDotSpacing = 20;
 const uint	kDraggerSize = 7; 	// By default, BDragger is 7x7 pixels 
 const bigtime_t kUpdateInterval = 100000; // 0.1s
@@ -24,6 +23,7 @@ const bigtime_t kUpdateInterval = 100000; // 0.1s
 
 const uint32	OPEN_PREFERENCES = 'pref';
 const uint32	MESSAGE_RELEASED = 'asdb';
+const uint32	SETTINGS_MESSAGE = 'sett';
 
 class MatrixView : public BView {
 public:
@@ -43,15 +43,32 @@ public:
 	
 	void SaveState();	// When application quits, the StateSave() function is called first
 	bool IsReplicant() const {
-		return this->_isReplicant;
+		return this->fIsReplicant;
 	}
 	void SaveNewPosition(BPoint point);
 
 private:
 	void LoadState();
+	// --- Settings serialization helpers ---
+	template <size_t N>
+	status_t LoadRaw(const BMessage* msg,
+			const char* name,
+			void* dest,
+			size_t expectedSize = N) const;
+	template <size_t N>
+	status_t SaveRaw(BMessage* msg,
+			const char* name,
+			const void* src,
+			size_t size = N) const;
+	//! ArchiveState() saves data into BMessage and is used in Archive() and SaveState()
+	status_t	ArchiveState(BMessage *archive, bool isReplicant = false);
+	//! UnarchiveState() loads data from BMessage and is used in constructor from BMessage and in LoadState()
+	status_t	UnarchiveState(BMessage *archive, bool isReplicant = false);
+	void	ApplyDefaultSettings();
 	
 	void InitDotBitmaps();
 	void RenderDotGradient(BBitmap* bitmap, bool active);
+	int32 VerifyDotSize(int32 &dotSize) const;
 	
 	void _ShowContextMenu(BPoint point);
 	void _ShowSettingsWindow();
@@ -73,10 +90,11 @@ private:
 	uint _bit_pos[kRows][kCols];   //!< Distribution of "_index" through the matrix
 	void InitBitPosSpiral();	//!< Initialize the _bit_pos matrix
 	void DumpBitPos();			//!< Debugging output function
+	
 
 	uint8_t _index[32];       //!< Binary that is to be displayed
 	uint8_t _gray[32];        //!< Binary Gray code of "_index"
-	uint8_t _user_mask[32];   //!< User changes to the displayed matrix
+	uint8_t _user_mask[32];   //!< User  changes to the displayed matrix
 
 	int bit_pos[8][8];  //!< Cells in this matrix are positions of bits
 	
@@ -86,9 +104,31 @@ private:
 	BDragger* _dragger;			//!< Replicant dragger
 
 	BPath _settingsPath;
-	BPoint _winPos;			//!< For saving and restoring window position
-	bool   _isReplicant;	//!< A replicant does not restore window position
+	BPoint fWinPos;			//!< For saving and restoring window position
+	bool   fIsReplicant;	//!< A replicant saves and restores settings from its archive
+
+	rgb_color	fActiveCenter;
+	rgb_color	fActiveEdge;
+	rgb_color	fInactiveCenter;
+	rgb_color	fInactiveEdge;
+	rgb_color	fBackground;
+	bool		fTransparentBackground;
+	int32		fDotSize;
 	
+	// Default values
+	static const rgb_color	kDefaultActiveCenter;
+	static const rgb_color	kDefaultActiveEdge;
+	static const rgb_color	kDefaultInactiveCenter;
+	static const rgb_color	kDefaultInactiveEdge;
+	static const rgb_color	kDefaultBackground;
+	static const bool		kDefaultTransparentBackground;
+	static const int32		kDefaultDotSize;
+	static const int32		kMinDotSize;
+	static const int32		kMaxDotSize;
+	static const char*		kSettingsFileName;
+	static const BPoint		kDefaultWinPos;
+	
+	// Debugging
 	static void LogToFile(const char* format, ...);	//!< For replicant debugging
 	static void ClearLogFile();	//!< Delete the log file for replicant debugging
 };

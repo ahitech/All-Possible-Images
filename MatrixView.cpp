@@ -20,62 +20,55 @@
 
 const char* kLogFileName = "MatrixView.log";
 
+const rgb_color	MatrixView::kDefaultActiveCenter = make_color(60, 60, 255);
+const rgb_color	MatrixView::kDefaultActiveEdge = make_color(0, 0, 120);
+const rgb_color	MatrixView::kDefaultInactiveCenter = make_color(0, 0, 0);
+const rgb_color	MatrixView::kDefaultInactiveEdge = make_color(64, 64, 64);
+const rgb_color	MatrixView::kDefaultBackground = make_color(0, 0, 0);
+const bool		MatrixView::kDefaultTransparentBackground = true;
+const int32		MatrixView::kDefaultDotSize = 16;
+const int32		MatrixView::kMinDotSize = 5;
+const int32		MatrixView::kMaxDotSize = 100;
+const char*		MatrixView::kSettingsFileName = "AllPossibleImages.dat";
+const BPoint	MatrixView::kDefaultWinPos(100, 100);
+
+
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MatrixView"
 
 MatrixView::MatrixView(BRect frame, const char* name)
 	: 	BView(frame, name, B_FOLLOW_NONE, B_WILL_DRAW | B_PULSE_NEEDED),
 		_dragger(nullptr),
-		_isReplicant(false),
-		_winPos(100, 100)		// Default window position
+		fIsReplicant(false),
+		fWinPos(100, 100),		// Default window position
+		_dotActive(nullptr),
+		_dotInactive(nullptr)
 {
 	ClearLogFile();
-
-	memset(_index, 0, sizeof(_index));
-	memset(_gray, 0, sizeof(_gray));
-	memset(_user_mask, 0, sizeof(_user_mask));
-	
-	// Clearing the bitmaps before usage
-	_dotActive = nullptr;
-	_dotInactive = nullptr;
-	// Prepare the bitmaps
-	InitDotBitmaps();
-
-	find_directory(B_USER_SETTINGS_DIRECTORY, &_settingsPath);
-	_settingsPath.Append("AllPossibleImages.dat");
-
-	SetViewColor(B_TRANSPARENT_COLOR);
-	SetLowColor(make_color(0, 0, 0));
+	ApplyDefaultSettings();		// Default settings are set
+	LoadState();	// Default settings overwritten by actual ones
 }
 
 MatrixView::MatrixView(BMessage* archive, bool isReplicant = false)
 	:	BView(archive),
-		_isReplicant(isReplicant),
+		fIsReplicant(isReplicant),
 		_dragger(nullptr),
-		_winPos(100, 100)
+		fWinPos(100, 100),
+		_dotActive(nullptr),
+		_dotInactive(nullptr)
 {
 	MatrixView::LogToFile("> In constructor from BMessage\n");
-	SetViewColor(B_TRANSPARENT_COLOR);
-	SetLowColor(make_color(0, 0, 0));
-	SetHighColor(0, 0, 255);
-	
-	memset(_index, 0, sizeof(_index));
-	memset(_gray, 0, sizeof(_gray));
-	memset(_user_mask, 0, sizeof(_user_mask));
-	
-	// Clearing the bitmaps before usage
-	_dotActive = nullptr;
-	_dotInactive = nullptr;
-	// Prepare the bitmaps
-	InitDotBitmaps();
-	
-	const char* string;
-	archive->FindString("settingsPath", 0, &string);
-	_settingsPath.SetTo(string);
-	MatrixView::LogToFile("\tSettings Path set to \'%s\'\n", _settingsPath.Path());
-	
-	LoadState();
-	MatrixView::LogToFile("< Constructor for BMessage finished\n");
+
+	ApplyDefaultSettings();	
+
+	if (!fIsReplicant) {
+		MatrixView::LogToFile("\tSettings Path set to \'%s\'\n", _settingsPath.Path());
+		LoadState();
+	} else {
+		MatrixView::LogToFile("\tUnarchiving replicant from message...\n");
+		UnarchiveState(archive, fIsReplicant);
+	}
+	MatrixView::LogToFile("< Constructor from BMessage finished\n");	
 }
 
 MatrixView::~MatrixView() {
@@ -115,6 +108,33 @@ status_t MatrixView::Archive(BMessage* archive, bool deep) const {
 	MatrixView::LogToFile("\tAdded Settings Path\n");
 	MatrixView::LogToFile("< Exitting Archive()\n");
 	return toReturn;
+}
+
+int32 MatrixView::VerifyDotSize(int32 &dotSize) const {
+	if (dotSize < MatrixView::kMinDotSize) { dotSize = MatrixView::kMinDotSize; }
+	if (dotSize > MatrixView::kMaxDotSize) { dotSize = MatrixView::kMaxDotSize; }
+	return dotSize;
+}
+
+void MatrixView::ApplyDefaultSettings() {
+	fDotSize = MatrixView::kDefaultDotSize;
+	fActiveCenter = MatrixView::kDefaultActiveCenter;
+	fActiveEdge = MatrixView::kDefaultActiveEdge;
+	fInactiveCenter = MatrixView::kDefaultInactiveCenter;
+	fInactiveEdge = MatrixView::kDefaultInactiveEdge;
+	fBackground = MatrixView::kDefaultBackground;
+	fTransparentBackground = MatrixView::kDefaultTransparentBackground;
+	fWinPos = MatrixView::kDefaultWinPos;
+
+	InitDotBitmaps();
+	InitBitPosSpiral();
+	
+	memset(_index, 0, sizeof(_index));
+	memset(_gray, 0, sizeof(_gray));
+	memset(_user_mask, 0, sizeof(_user_mask));
+	
+	find_directory(B_USER_SETTINGS_DIRECTORY, &_settingsPath);
+	_settingsPath.Append(MatrixView::kSettingsFileName);
 }
 
 void MatrixView::MessageReceived(BMessage* in) {
@@ -160,7 +180,7 @@ void MatrixView::MessageReceived(BMessage* in) {
 }
 
 void MatrixView::InitDotBitmaps() {
-	const int size = kDotSize;
+	const int size = fDotSize;
 	BRect bounds(0, 0, size - 1, size - 1);
 
 	_dotActive = new BBitmap(bounds, B_RGBA32, true);
@@ -194,13 +214,13 @@ void MatrixView::AttachedToWindow() {
 
 void MatrixView::Draw(BRect) {
 	SetDrawingMode(B_OP_COPY);
-	if (!_isReplicant) {
-		SetHighColor(0, 0, 0, 0);
+	if (!fIsReplicant) {
+		SetHighColor(fBackground);
 		FillRect(Bounds());			// Clearing the background
 	}
 	
 	SetDrawingMode(B_OP_ALPHA); // Using alpha channels for transparency
-	if (_isReplicant) {
+	if (fIsReplicant) {
 		SetLowColor(B_TRANSPARENT_COLOR);
 		SetViewColor(B_TRANSPARENT_COLOR);
 		SetHighColor(B_TRANSPARENT_COLOR);
@@ -219,8 +239,8 @@ void MatrixView::Draw(BRect) {
 			bool visible = gray ^ user;
 
 			BBitmap* dot = visible ? _dotActive : _dotInactive;
-			BPoint topLeft(x * kDotSpacing + (kDotSpacing - kDotSize + kDraggerSize)/2,
-						   y * kDotSpacing + (kDotSpacing - kDotSize + kDraggerSize)/2);
+			BPoint topLeft(x * kDotSpacing + (kDotSpacing - fDotSize + kDraggerSize)/2,
+						   y * kDotSpacing + (kDotSpacing - fDotSize + kDraggerSize)/2);
 
 			// Output
 			DrawBitmap(dot, topLeft);
@@ -277,86 +297,233 @@ void MatrixView::Pulse() {
     Invalidate();
 }
 
+template <size_t N>
+status_t MatrixView::SaveRaw(BMessage* msg, const char* name, const void* src, size_t size) const {
+	if (msg != nullptr)
+		return msg->AddData(name,
+			B_RAW_TYPE, 
+			src, 
+			size, 
+			false /* not fixed-size */);
+	else
+		return B_BAD_VALUE;
+}
+
 void MatrixView::SaveState() {
 	MatrixView::LogToFile("> Entering SaveState()\n");
+	if (fIsReplicant) {
+		MatrixView::LogToFile("\tThis window is a replicant!\n");
+		MatrixView::LogToFile("< Exitting SaveState()\n");
+		return;
+	}
+	
 	static BLocker saveLock("SaveStateLock");
-	BFile file(_settingsPath.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+	BFile file(_settingsPath.Path(),
+				B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
 	if (file.InitCheck() != B_OK) {
+		MatrixView::LogToFile("\tCould not initialize settings file!\n");
 		return;
 	} else {
 		MatrixView::LogToFile("\tSettings file initialized correctly\n");
 	}
 
-	saveLock.Lock();
-	file.Write(_index, sizeof(_index));
-	MatrixView::LogToFile("\tWrote index = 0x%016X\n", _index);
-	file.Write(_user_mask, sizeof(_user_mask));
-	MatrixView::LogToFile("\tWrote user mask = 0x%016X\n", _user_mask);
-	
-	if (!_isReplicant) {
-		// Save window position
-		MatrixView::LogToFile("\tSaving window position as (%.2f, %.2f)\n",
-			_winPos.x, _winPos.y);
-		file.Write(&_winPos, sizeof(BPoint));
-	} else {
-		MatrixView::LogToFile("\tThis window is a replicant!\n");
-	}
+	BMessage settings(SETTINGS_MESSAGE);
+	ArchiveState(&settings, false);
 
+	saveLock.Lock();	
+	status_t flattenResult = settings.Flatten(&file);
 	saveLock.Unlock();
-	MatrixView::LogToFile("> Exitting SaveState()\n");
+	
+	if (B_OK != flattenResult) {
+		MatrixView::LogToFile("\tFailed to flatten settings: %s\n",
+							strerror(flattenResult));
+	} else {
+		MatrixView::LogToFile("\tFlattened settings to file correctly!\n");
+	}
+	
+	MatrixView::LogToFile("< Exitting SaveState()");
 }
 
-void MatrixView::LoadState() {
-	MatrixView::LogToFile("> Entering LoadState()\n");
-	BFile file(_settingsPath.Path(), B_READ_ONLY);
-	if (file.InitCheck() != B_OK)
-		return;
+status_t MatrixView::ArchiveState(BMessage *archive, bool isReplicant) {
+	MatrixView::LogToFile("> Entering ArchiveState(%s)\n",
+		isReplicant ? "Replicant" : "Not replicant");
 
-	InitBitPosSpiral();
+	// Sanity check
+	if (nullptr == archive) {
+		MatrixView::LogToFile("< Exitting ArchiveState(%s): %s",
+			isReplicant ? "Replicant" : "Not replicant",
+			"Pointer to the input message is NULL.\n");
+		return B_BAD_ADDRESS;
+	}
+
+// Both _index and _user_mask are pointers to _index[0] and _user_mask[0]
+	SaveRaw<sizeof(_index)>(archive, "index", _index);
+	SaveRaw<sizeof(_user_mask)>(archive, "user_mask", _user_mask);
+
+	if (!isReplicant) {
+		MatrixView::LogToFile("\tSaving window position as (%.2f, %.2f)\n",
+				fWinPos.x, fWinPos.y);
+		archive->AddPoint("window_position", fWinPos);
+	}
+
+	archive->AddData("active_center", B_RGB_COLOR_TYPE, 
+					&fActiveCenter, sizeof(rgb_color));
+	archive->AddData("active_edge", B_RGB_COLOR_TYPE, 
+					&fActiveEdge, sizeof(rgb_color));
+	archive->AddData("inactive_center", B_RGB_COLOR_TYPE, 
+					&fInactiveCenter, sizeof(rgb_color));
+	archive->AddData("inactive_edge", B_RGB_COLOR_TYPE, 
+					&fInactiveEdge, sizeof(rgb_color));
+	archive->AddData("background", B_RGB_COLOR_TYPE, 
+					&fBackground, sizeof(rgb_color));
+	archive->AddBool("is_transparent", fTransparentBackground);
+	archive->AddInt32("dot_size", fDotSize);
 	
-	ssize_t read1 = file.Read(_index, sizeof(_index));
-	ssize_t read2 = file.Read(_user_mask, sizeof(_user_mask));
-	if (read1 != sizeof(_index))
-		memset(_index, 0, sizeof(_index));
-	if (read2 != sizeof(_user_mask))
-		memset(_user_mask, 0, sizeof(_user_mask));
+	MatrixView::LogToFile("< Exitting ArchiveState(%s)\n",
+			isReplicant ? "Replicant" : "Not replicant");
+	return B_OK;
+}
+
+template <size_t N>
+status_t MatrixView::LoadRaw(const BMessage* msg,
+		const char* name, 
+		void* dest, 
+		size_t expectedSize = N) const
+{
+	const void* data = nullptr;
+	ssize_t size;
+	status_t err = msg->FindData(name, B_RAW_TYPE, &data, &size);
+	if (err == B_OK && size == expectedSize) {
+		memcpy(dest, data, expectedSize);
+		return B_OK;
+	}
+	memset(dest, 0, expectedSize);
+	return err;
+}
+
+
+status_t MatrixView::UnarchiveState(BMessage* archive, bool isReplicant) {
+	MatrixView::LogToFile("> Entering UnarchiveState(%s)\n",
+		isReplicant ? "Replicant" : "Not replicant");
+		
+	status_t toReturn = B_OK;
+	status_t tempResult = B_OK;
+	const void* data;
+	ssize_t size;
+	
+	// Sanity check
+	if (nullptr == archive) {
+		toReturn = B_BAD_ADDRESS;
+		MatrixView::LogToFile("< Exitting UnarchiveState(%s): %s",
+			isReplicant ? "Replicant" : "Not replicant",
+			"Pointer to the input message is NULL.\n");
+	}
+	
+	toReturn = LoadRaw<sizeof(_index)>(archive, "index", _index);
+	if (toReturn == B_OK) {
+		toReturn = LoadRaw<sizeof(_user_mask)>(archive, "user_mask", _user_mask);
+	}	
 
 	// Translation from _index to _gray
 	_gray[0] = _index[0];
 	for (int i = 1; i < 32; ++i)
 		_gray[i] = _index[i] ^ _index[i - 1];
-		
-	// Restore window position
-	if (!_isReplicant) {
-		ssize_t readPos = file.Read(&_winPos, sizeof(BPoint));
-		if (readPos == sizeof(BPoint) && Window()) {		
+
+	// Restoring window position
+	if (toReturn == B_OK &&
+		(toReturn = archive->FindPoint("window_position", &fWinPos)) == B_OK)
+	{
+		MatrixView::LogToFile("\tWinPos from file is (%.2f, %.2f)\n", fWinPos.x, fWinPos.y);
+
+		if (Window()) {
 			BScreen screen(Window());
 			BRect screenFrame = screen.Frame();
-			
-			MatrixView::LogToFile("\tWinPos from file is (%.2f, %.2f)\n",
-				_winPos.x, _winPos.y);
-	
-			// If the window occurs outside of the screen view area,
-			// (for example, because the resolution has changed),
-			if (screenFrame.Contains(_winPos))
-			{
-				MatrixView::LogToFile("\tMoving the window to (%.2f, %.2f)\n",
-					_winPos.x, _winPos.y);
-				Window()->MoveTo(_winPos);
+
+			if (screenFrame.Contains(fWinPos)) {
+				MatrixView::LogToFile("\tMoving the window to (%.2f, %.2f)\n", fWinPos.x, fWinPos.y);
+				Window()->MoveTo(fWinPos);
 			} else {
 				MatrixView::LogToFile("\tMoving the window to (100, 100)\n");
-				Window()->MoveTo(100, 100); // Move the window to origin
+				Window()->MoveTo(100, 100);
 			}
 		}
 	}
+
+	rgb_color color;
+	if (toReturn == B_OK &&
+		(toReturn = archive->FindData("active_center", B_RGB_COLOR_TYPE, (const void**)&data, &size)) == B_OK && 
+		size == sizeof(rgb_color))
+				fActiveCenter = *(const rgb_color*)data;
+	if (toReturn == B_OK &&
+		(toReturn = archive->FindData("active_edge", B_RGB_COLOR_TYPE, (const void**)&data, &size)) == B_OK && 
+		size == sizeof(rgb_color))
+				fActiveEdge = *(const rgb_color*)data;
+	if (toReturn == B_OK &&
+		(toReturn = archive->FindData("inactive_center", B_RGB_COLOR_TYPE, (const void**)&data, &size)) == B_OK && 
+		size == sizeof(rgb_color))
+				fInactiveCenter = *(const rgb_color*)data;
+	if (toReturn == B_OK &&
+		(toReturn = archive->FindData("inactive_edge", B_RGB_COLOR_TYPE, (const void**)&data, &size)) == B_OK && 
+		size == sizeof(rgb_color))
+				fInactiveEdge = *(const rgb_color*)data;
+	if (toReturn == B_OK &&
+		(toReturn = archive->FindData("background", B_RGB_COLOR_TYPE, (const void**)&data, &size)) == B_OK &&
+		size == sizeof(rgb_color))
+				fBackground = *(const rgb_color*)data;
+	int32 dotSize;
+	if (toReturn == B_OK &&
+		(toReturn = archive->FindInt32("dot_size", &dotSize)) == B_OK) {
+				fDotSize = VerifyDotSize(dotSize);
+	}
+	bool transparent;
+	if (toReturn == B_OK &&
+		(toReturn = archive->FindBool("is_transparent", &transparent)) == B_OK)
+				fTransparentBackground = transparent;
+		
+	MatrixView::LogToFile("< Exitting UnarchiveState(%s) with result %s\n",
+		isReplicant ? "Replicant" : "Not replicant",
+		strerror(toReturn));
+	return toReturn;
+}
+
+void MatrixView::LoadState() {
+	MatrixView::LogToFile("> Entering LoadState()\n");
+
+	if (fIsReplicant) {
+		MatrixView::LogToFile("\tThis window is a replicant!\n");
+		MatrixView::LogToFile("< Exitting LoadState()\n");
+		return;
+	}
+
+	static BLocker loadLock("LoadStateLock");
+	InitBitPosSpiral();
+
+	BFile file(_settingsPath.Path(), B_READ_ONLY);
+	if (file.InitCheck() != B_OK) {
+		MatrixView::LogToFile("\tCould not open settings file!\n");
+		return;
+	}
+
+	BMessage settings(SETTINGS_MESSAGE);
+	
+	loadLock.Lock();
+	status_t unflattenResult = settings.Unflatten(&file);
+	loadLock.Unlock();
+	if (unflattenResult != B_OK) {
+		MatrixView::LogToFile("\tUnflatten failed: %s\n", strerror(unflattenResult));
+		return;
+	}
+	
+	UnarchiveState(&settings, false);
+
 	MatrixView::LogToFile("< Exitting LoadState()\n");
 }
 
 void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {
 	uint8* bits = (uint8*)bitmap->Bits();
 	int32 bpr = bitmap->BytesPerRow();
-	const int size = kDotSize;
-	const int radius = kDotSize / 2;
+	const int size = fDotSize;
+	const int radius = fDotSize / 2;
 	
 	LogToFile("> Entering RenderDotGradient()\n");
 
@@ -513,7 +680,7 @@ void MatrixView::ClearLogFile() {
 }
 
 void MatrixView::SaveNewPosition(BPoint point) {
-	_winPos = point;
+	fWinPos = point;
 	MatrixView::LogToFile("> SaveNewPosition(). New origin is (%.2f, %.2f)\n",
-						_winPos.x, _winPos.y);
+						fWinPos.x, fWinPos.y);
 }

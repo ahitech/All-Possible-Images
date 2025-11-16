@@ -11,9 +11,10 @@
 #include <Messenger.h>
 
 
-#define COLOR_SELECTED 'clrs'
-#define COLOR_PICKER_OK 'cpok'
-#define COLOR_PICKER_CANCEL 'cpcn'
+const uint32 COLOR_SELECTED			= 'clrs';
+const uint32 COLOR_PICKER_OK		= 'cpok';
+const uint32 COLOR_PICKER_CANCEL	= 'cpcn';
+const uint32 SEND_COLOR_TO_BUTTON	= 'colr';
 
 
 class ColorPickerWindow : public BWindow {

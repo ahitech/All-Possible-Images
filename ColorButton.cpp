@@ -85,7 +85,7 @@ void ColorButton::MouseDown(BPoint where) {
 void ColorButton::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
-		case 'colr':
+		case SEND_COLOR_TO_BUTTON:
 		{
 			rgb_color *newColor;
 			size_t readSize;
