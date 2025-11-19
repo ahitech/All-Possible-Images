@@ -101,11 +101,9 @@ status_t MatrixView::Archive(BMessage* archive, bool deep) const {
 	}
 	MatrixView::LogToFile("\tAdded signature\n");
 	
-	if ((toReturn = archive->AddString("settingsPath",
-									_settingsPath.Path())) != B_OK) {
-		return toReturn;
-	}
-	MatrixView::LogToFile("\tAdded Settings Path\n");
+	ArchiveState(archive, true);
+	MatrixView::LogToFile("\tFinished call to ArchiveState()\n");
+	
 	MatrixView::LogToFile("< Exitting Archive()\n");
 	return toReturn;
 }
