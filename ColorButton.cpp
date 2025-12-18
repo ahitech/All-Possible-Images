@@ -69,7 +69,7 @@ void ColorButton::MouseDown(BPoint where) {
 		return;
 	
 	BRect screenFrame = Window()->Frame();
-	BRect windowRect(0, 0, 250, 200);
+	BRect windowRect(0, 0, 270, 230);
 	BPoint center = screenFrame.LeftTop();
 	center.x += screenFrame.Width() / 2;
 	center.y += screenFrame.Height() / 2;

@@ -10,12 +10,23 @@
 #include <Button.h>
 #include <Messenger.h>
 
-
 const uint32 COLOR_SELECTED			= 'clrs';
 const uint32 COLOR_PICKER_OK		= 'cpok';
 const uint32 COLOR_PICKER_CANCEL	= 'cpcn';
 const uint32 SEND_COLOR_TO_BUTTON	= 'colr';
 
+class ColorPreviewView : public BView {
+public:
+	ColorPreviewView();	
+	inline void SetColor(rgb_color color) {
+		fColor = color;
+		Invalidate();
+	}
+	inline rgb_color Color() const { return fColor; }
+	void Draw(BRect) override;
+private:
+	rgb_color fColor;
+};
 
 class ColorPickerWindow : public BWindow {
 public:
@@ -26,6 +37,7 @@ public:
 
 private:
 	BColorControl* fColorControl;
+	ColorPreviewView*	fPreview; 
 	BMessenger fTarget;
 };
 
