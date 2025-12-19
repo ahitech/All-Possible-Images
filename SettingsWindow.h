@@ -17,34 +17,44 @@
 #include <StringView.h>
 #include <Box.h>
 
-
 class ColorButton;
 
+const uint32	OK_MESSAGE		= 'Yes!';
+const uint32	APPLY_MESSAGE	= 'Try ';
+const uint32	CANCEL_MESSAGE	= 'No! ';
+const uint32	TEXT_MODIFIED	= 'txtm';
 
 class SettingsWindow : public BWindow {
 public:
-	SettingsWindow(BRect frame);
+	SettingsWindow(BRect frame, BMessage& settings);
 	virtual ~SettingsWindow();
 	
 	virtual void MessageReceived(BMessage* in);
-
-protected:	
+	virtual void SetTarget(BView* in) { fTargetView = in; }
+private:
+	void ApplySettings();
+	
 	ColorButton* fBgColorButton;
-	BCheckBox* fTransparentCheck;
-	rgb_color fBackgroundColor;
+	BCheckBox*	fTransparentCheck;
+	rgb_color	fBackgroundColor;
 		
 	BTextControl* fDotSizeText;
 	uint fDotSize;
 	
 	ColorButton* fActiveCenterButton;
 	ColorButton* fActiveEdgeButton;
-	rgb_color fActiveCenterColor;
-	rgb_color fActiveEdgeColor;
+	rgb_color 	fActiveCenterColor;
+	rgb_color 	fActiveEdgeColor;
 	
 	ColorButton* fInactiveCenterButton;
 	ColorButton* fInactiveEdgeButton;
-	rgb_color fInactiveCenterColor;
-	rgb_color fInactiveEdgeColor;
+	rgb_color 	fInactiveCenterColor;
+	rgb_color	fInactiveEdgeColor;
+	
+	BButton 	*fOk, *fCancel, *fApply;
+	
+	BMessage 	fSettingsMessage;
+	BView*		fTargetView;
 };
 
 #endif // SETTINGS_WINDOW_HPP

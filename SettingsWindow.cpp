@@ -20,15 +20,24 @@
 #include <TranslationUtils.h>
 #include <LocaleRoster.h>
 #include <Catalog.h>
+#include <stdlib.h>
+#include <cstdio>
+#include <cstring>
+
+const uint		kMinDotSize 	= 5;
+const uint		kMaxDotSize		= 100;
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "Settings Window"
 
-SettingsWindow::SettingsWindow(BRect frame)
+SettingsWindow::SettingsWindow(BRect frame, BMessage& settings)
 	:
 	BWindow(frame, B_TRANSLATE("Settings"), B_TITLED_WINDOW,
-		B_NOT_ZOOMABLE | B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS)
+		B_NOT_ZOOMABLE | B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS),
+	fSettingsMessage(settings),
+	fOk(nullptr), fApply(nullptr), fCancel(nullptr)
 {
+	
 	SetLayout(new BGroupLayout(B_VERTICAL));
 
 	// === 1. Background color box ===
@@ -47,8 +56,10 @@ SettingsWindow::SettingsWindow(BRect frame)
 		.Add(transparentCheckbox);
 
 	// === 2. Dot diameter field ===
-	BTextControl* dotSize = new BTextControl("DotSize",
+	fDotSizeText = new BTextControl("DotSize",
 		B_TRANSLATE("Dot Diameter:"), "16", nullptr);
+	fDotSizeText->SetModificationMessage(new BMessage(TEXT_MODIFIED));
+	fDotSizeText->SetTarget(this);
 
 	// === 3. Info string ===
 	BStringView* infoLabel = new BStringView("InfoLabel",
@@ -81,15 +92,33 @@ SettingsWindow::SettingsWindow(BRect frame)
 		.SetInsets(15, 20, 15, 10)
 		.Add(fInactiveCenterButton)
 		.Add(fInactiveEdgeButton);
+		
+	// === 6. Action buttons ===
+	fCancel	= new BButton("cancel", B_TRANSLATE("Cancel"),
+						new BMessage(CANCEL_MESSAGE));
+	fApply	= new BButton("apply", B_TRANSLATE("Apply"),
+						new BMessage(APPLY_MESSAGE));
+	fOk 	= new BButton("ok", B_TRANSLATE("OK"), 
+						new BMessage(OK_MESSAGE));
+	fOk->MakeDefault(true);
+	fCancel->SetTarget(this);
+	fApply->SetTarget(this);
+	fOk->SetTarget(this);
+	BGroupView* buttonRow = new BGroupView(B_HORIZONTAL);
+	buttonRow->GroupLayout()->SetInsets(0, 0, 0, 0); // Margins
+	buttonRow->GroupLayout()->AddView(fCancel);
+	buttonRow->GroupLayout()->AddView(fApply);
+	buttonRow->GroupLayout()->AddView(fOk);
 
 	// === Main layout ===
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 10)
 		.SetInsets(10)
 		.Add(backgroundBox)
-		.Add(dotSize)
+		.Add(fDotSizeText)
 		.Add(infoLabel)
 		.Add(activeBox)
-		.Add(inactiveBox);
+		.Add(inactiveBox)
+		.Add(buttonRow);
 
 	Show();
 }
@@ -99,5 +128,78 @@ SettingsWindow::~SettingsWindow() {
 }
 
 void SettingsWindow::MessageReceived(BMessage* message) {
+	switch (message->what) {
+		case TEXT_MODIFIED:
+		{
+			char buffer[8];
+			strncpy(buffer, fDotSizeText->Text(), 8);
+			char *endptr = nullptr;
+			
+			long parsed = strtol(buffer, &endptr, 0);
+			uint previousDotSize = fDotSize;
+			
+			if (parsed < kMinDotSize) {
+				fDotSize = kMinDotSize;
+			} else if (parsed > kMaxDotSize) {
+				fDotSize = kMaxDotSize;
+			} else {
+				fDotSize = static_cast<int>(parsed);
+			}
+			
+			if (previousDotSize != fDotSize) {
+				snprintf(buffer, sizeof(buffer), "%ld", fDotSize);					
+				fDotSizeText->SetText(buffer);
+				fDotSizeText->TextView()->Select(3, 3);
+			}
+			break;
+		}
+		case OK_MESSAGE:
+			ApplySettings();
+			Quit(); // Close window after applying settings
+			break;
+
+		case APPLY_MESSAGE:
+			ApplySettings(); // Just applying the settings
+			break;
+
+		case CANCEL_MESSAGE:
+			Quit(); // Just closing the window
+			break;
+
+		default:
+			break;
+	}
 	BWindow::MessageReceived(message);
+}
+
+void SettingsWindow::ApplySettings()
+{
+	fActiveCenterColor = fActiveCenterButton->Color();
+	fSettingsMessage.ReplaceData("active_center", B_RGB_COLOR_TYPE,
+		&fActiveCenterColor, sizeof(rgb_color));
+	fActiveEdgeColor = fActiveEdgeButton->Color();
+	fSettingsMessage.ReplaceData("active_edge", B_RGB_COLOR_TYPE,
+		&fActiveEdgeColor, sizeof(rgb_color));
+	fInactiveCenterColor = fInactiveCenterButton->Color();
+	fSettingsMessage.ReplaceData("inactive_center", B_RGB_COLOR_TYPE,
+		&fInactiveCenterColor, sizeof(rgb_color));
+	fInactiveEdgeColor = fInactiveEdgeButton->Color();
+	fSettingsMessage.ReplaceData("inactive_edge", B_RGB_COLOR_TYPE,
+		&fInactiveEdgeColor, sizeof(rgb_color));
+	fBackgroundColor = fBgColorButton->Color();
+	fSettingsMessage.ReplaceData("background", B_RGB_COLOR_TYPE,
+		&fBackgroundColor, sizeof(rgb_color));
+	
+	fSettingsMessage.ReplaceInt32("dot_size", fDotSize);
+
+	bool transparent = (fTransparentCheck->Value() == B_CONTROL_ON);
+	fSettingsMessage.ReplaceBool("is_transparent", transparent);
+
+	if (fTargetView &&
+		fTargetView->Window() &&
+		fTargetView->Window()->LockLooper())
+	{
+//		fTargetView->PostMessage(&fSettingsMessage);
+		fTargetView->Window()->UnlockLooper();
+	}
 }

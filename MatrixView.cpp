@@ -635,6 +635,7 @@ void MatrixView::_ShowContextMenu(BPoint point)
 
 
 void MatrixView::_ShowSettingsWindow() {
+	LogToFile("> Entering ShowSettingsWindow()\n");
 	BRect screenFrame = BScreen().Frame();
 	BRect winFrame(100, 100, 400, 300);
 
@@ -643,8 +644,20 @@ void MatrixView::_ShowSettingsWindow() {
 		(screenFrame.Width() - winFrame.Width()) / 2,
 		(screenFrame.Height() - winFrame.Height()) / 2
 	);
+	
+	/* Get ready to send current settings to the settings window */
+	BMessage settings(SETTINGS_MESSAGE);
+	if (B_OK != ArchiveState(&settings, fIsReplicant)) {
+		LogToFile("\tArchiveState failed, bailing out...\n");
+		LogToFile("< Exitting ShowSettingsWindow();\n");
+		return;
+	}	
 
-	new SettingsWindow(winFrame); // It will be loaded and shown by itself
+	// Settings  will be loaded and shown by itself
+	SettingsWindow* settingsWindow = new SettingsWindow(winFrame,
+			settings);
+	settingsWindow->SetTarget(this);
+	LogToFile("\tSettings window initialized\n< Exitting ShowSettingsWindow()\n");	
 }
 
 void MatrixView::LogToFile(const char* format, ...) {

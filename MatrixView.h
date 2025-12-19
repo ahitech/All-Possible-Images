@@ -64,7 +64,7 @@ private:
 	status_t	ArchiveState(BMessage *archive, bool isReplicant = false);
 	//! UnarchiveState() loads data from BMessage and is used in constructor from BMessage and in LoadState()
 	status_t	UnarchiveState(BMessage *archive, bool isReplicant = false);
-	void	ApplyDefaultSettings();
+	void		ApplyDefaultSettings();
 	
 	void InitDotBitmaps();
 	void RenderDotGradient(BBitmap* bitmap, bool active);
