@@ -24,10 +24,11 @@ const uint32	APPLY_MESSAGE	= 'Try ';
 const uint32	CANCEL_MESSAGE	= 'No! ';
 const uint32	DEFAULTS_MSG	= 'Back';
 const uint32	TEXT_MODIFIED	= 'txtm';
+const uint32	UPDATE_PREFERENCES='upda';
 
 class SettingsWindow : public BWindow {
 public:
-	SettingsWindow(BRect frame, BMessage& settings);
+	SettingsWindow(BRect frame, BMessage* settings);
 	virtual ~SettingsWindow() {};
 	
 	virtual void MessageReceived(BMessage* in);
@@ -55,7 +56,7 @@ private:
 	
 	BButton 	*fOk, *fCancel, *fApply, *fDefaults;
 	
-	BMessage 	fSettingsMessage;
+	BMessage* 	fSettingsMessage;
 	BView*		fTargetView;
 };
 

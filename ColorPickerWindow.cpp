@@ -112,7 +112,6 @@ void ColorPickerWindow::MessageReceived(BMessage* message) {
 			break;
 		}
 		case B_VALUE_CHANGED: {
-			fprintf (stderr, "Value changed!\n");
 			rgb_color color = fColorControl->ValueAsColor();
 			fPreview->SetColor(color);
 			break;

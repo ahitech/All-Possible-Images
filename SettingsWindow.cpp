@@ -30,13 +30,15 @@ const uint		kMaxDotSize		= 100;
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "Settings Window"
 
-SettingsWindow::SettingsWindow(BRect frame, BMessage& settings)
+SettingsWindow::SettingsWindow(BRect frame, BMessage* settings)
 	:
 	BWindow(frame, B_TRANSLATE("Settings"), B_TITLED_WINDOW,
 		B_NOT_ZOOMABLE | B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS),
-	fSettingsMessage(settings),
 	fOk(nullptr), fApply(nullptr), fCancel(nullptr)
 {
+	if (settings == nullptr) { return; }
+	fSettingsMessage = new BMessage(*settings);	
+	fSettingsMessage->what = UPDATE_PREFERENCES;
 	
 	SetLayout(new BGroupLayout(B_VERTICAL));
 
@@ -194,32 +196,33 @@ void SettingsWindow::MessageReceived(BMessage* message) {
 
 void SettingsWindow::ApplySettings()
 {
+	fSettingsMessage->what = UPDATE_PREFERENCES;
 	fActiveCenterColor = fActiveCenterButton->Color();
-	fSettingsMessage.ReplaceData("active_center", B_RGB_COLOR_TYPE,
+	fSettingsMessage->ReplaceData("active_center", B_RGB_COLOR_TYPE,
 		&fActiveCenterColor, sizeof(rgb_color));
 	fActiveEdgeColor = fActiveEdgeButton->Color();
-	fSettingsMessage.ReplaceData("active_edge", B_RGB_COLOR_TYPE,
+	fSettingsMessage->ReplaceData("active_edge", B_RGB_COLOR_TYPE,
 		&fActiveEdgeColor, sizeof(rgb_color));
 	fInactiveCenterColor = fInactiveCenterButton->Color();
-	fSettingsMessage.ReplaceData("inactive_center", B_RGB_COLOR_TYPE,
+	fSettingsMessage->ReplaceData("inactive_center", B_RGB_COLOR_TYPE,
 		&fInactiveCenterColor, sizeof(rgb_color));
 	fInactiveEdgeColor = fInactiveEdgeButton->Color();
-	fSettingsMessage.ReplaceData("inactive_edge", B_RGB_COLOR_TYPE,
+	fSettingsMessage->ReplaceData("inactive_edge", B_RGB_COLOR_TYPE,
 		&fInactiveEdgeColor, sizeof(rgb_color));
 	fBackgroundColor = fBgColorButton->Color();
-	fSettingsMessage.ReplaceData("background", B_RGB_COLOR_TYPE,
+	fSettingsMessage->ReplaceData("background", B_RGB_COLOR_TYPE,
 		&fBackgroundColor, sizeof(rgb_color));
 	
-	fSettingsMessage.ReplaceInt32("dot_size", fDotSize);
+	fSettingsMessage->ReplaceInt32("dot_size", fDotSize);
 
 	bool transparent = (fTransparentCheck->Value() == B_CONTROL_ON);
-	fSettingsMessage.ReplaceBool("is_transparent", transparent);
+	fSettingsMessage->ReplaceBool("is_transparent", transparent);
 
 	if (fTargetView &&
 		fTargetView->Window() &&
 		fTargetView->Window()->LockLooper())
 	{
-//		fTargetView->PostMessage(&fSettingsMessage);
+		fTargetView->Window()->PostMessage(fSettingsMessage, fTargetView);
 		fTargetView->Window()->UnlockLooper();
 	}
 }

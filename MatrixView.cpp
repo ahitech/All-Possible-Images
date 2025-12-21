@@ -136,6 +136,18 @@ void MatrixView::ApplyDefaultSettings() {
 }
 
 void MatrixView::MessageReceived(BMessage* in) {
+	MatrixView::LogToFile("> Entering MatrixView::MessageReceived()\n");
+	char tag[5] = {
+	    (char)((in->what >> 24) & 0xFF),
+	    (char)((in->what >> 16) & 0xFF),
+	    (char)((in->what >> 8) & 0xFF),
+	    (char)(in->what & 0xFF),
+	    0
+	};
+	if (in->what != 0x5F4D4D56) {
+		MatrixView::LogToFile("\tin->what is 0x%08X (%s)\n", in->what,
+			tag);
+	}
 	switch (in->what) {
 		case (MESSAGE_RELEASED):
 		{
@@ -151,10 +163,23 @@ void MatrixView::MessageReceived(BMessage* in) {
 				in->Flatten(&file);  // Save BMessage to hard drive
 			break;
 		}
-		case OPEN_PREFERENCES:		
+		case (OPEN_PREFERENCES):
 		{
 			MatrixView::LogToFile("> Got request to show settings window\n");
 			_ShowSettingsWindow();
+			break;
+		}
+		case (UPDATE_PREFERENCES):
+		{
+			MatrixView::LogToFile("> Received message with new settings!\n");
+			UnarchiveState(in, this->fIsReplicant);
+			Window()->LockLooper();
+			
+			MatrixView::LogToFile("\tRendering new bitmaps\n");
+			InitDotBitmaps();
+			Window()->UnlockLooper();
+			Invalidate();
+			MatrixView::LogToFile("< Finished working with message with new settings.\n");
 			break;
 		}
 		case B_ABOUT_REQUESTED:
@@ -175,6 +200,7 @@ void MatrixView::MessageReceived(BMessage* in) {
 		default:
 			BView::MessageReceived(in);
 	};
+	MatrixView::LogToFile("< Exitting MatrixView::MessageReceived()\n");
 }
 
 void MatrixView::InitDotBitmaps() {
@@ -401,7 +427,7 @@ status_t MatrixView::LoadRaw(const BMessage* msg,
 
 
 status_t MatrixView::UnarchiveState(BMessage* archive, bool isReplicant) {
-	MatrixView::LogToFile("> Entering UnarchiveState(%s)\n",
+	MatrixView::LogToFile("> Entering UnarchiveState (%s)\n",
 		isReplicant ? "Replicant" : "Not replicant");
 		
 	status_t toReturn = B_OK;
@@ -412,7 +438,7 @@ status_t MatrixView::UnarchiveState(BMessage* archive, bool isReplicant) {
 	// Sanity check
 	if (nullptr == archive) {
 		toReturn = B_BAD_ADDRESS;
-		MatrixView::LogToFile("< Exitting UnarchiveState(%s): %s",
+		MatrixView::LogToFile("< Exitting UnarchiveState (%s): %s",
 			isReplicant ? "Replicant" : "Not replicant",
 			"Pointer to the input message is NULL.\n");
 	}
@@ -478,7 +504,7 @@ status_t MatrixView::UnarchiveState(BMessage* archive, bool isReplicant) {
 		(toReturn = archive->FindBool("is_transparent", &transparent)) == B_OK)
 				fTransparentBackground = transparent;
 		
-	MatrixView::LogToFile("< Exitting UnarchiveState(%s) with result %s\n",
+	MatrixView::LogToFile("< Exitting UnarchiveState (%s) with result %s\n",
 		isReplicant ? "Replicant" : "Not replicant",
 		strerror(toReturn));
 	return toReturn;
@@ -525,8 +551,8 @@ void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {
 	
 	LogToFile("> Entering RenderDotGradient()\n");
 
-	rgb_color center = active ? make_color(60, 60, 255) : make_color(0, 0, 0);
-	rgb_color edge   = active ? make_color(0, 0, 120) : make_color(64, 64, 64);
+	rgb_color center = active ? fActiveCenter : fInactiveCenter;
+	rgb_color edge   = active ? fActiveEdge : fInactiveEdge;
 	
 	LogToFile("\t%s -> Center: (%d, %d, %d), Edge: (%d, %d, %d)\n",
 		active ? "Active dot" : "Inactive dot",
@@ -655,7 +681,7 @@ void MatrixView::_ShowSettingsWindow() {
 
 	// Settings  will be loaded and shown by itself
 	SettingsWindow* settingsWindow = new SettingsWindow(winFrame,
-			settings);
+			&settings);
 	settingsWindow->SetTarget(this);
 	LogToFile("\tSettings window initialized\n< Exitting ShowSettingsWindow()\n");	
 }

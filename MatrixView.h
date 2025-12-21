@@ -24,6 +24,7 @@ const bigtime_t kUpdateInterval = 100000; // 0.1s
 const uint32	OPEN_PREFERENCES = 'pref';
 const uint32	MESSAGE_RELEASED = 'asdb';
 const uint32	SETTINGS_MESSAGE = 'sett';
+// const uint32	UPDATE_PREFERENCES='upda';
 
 class MatrixView : public BView {
 public:
