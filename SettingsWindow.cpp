@@ -44,16 +44,16 @@ SettingsWindow::SettingsWindow(BRect frame, BMessage& settings)
 	BBox* backgroundBox = new BBox("BackgroundColorBox");
 	backgroundBox->SetLabel(B_TRANSLATE("Background Color"));
 	
-	ColorButton* bgColorButton = new ColorButton("BGColorButton", 
+	fBgColorButton = new ColorButton("BGColorButton", 
 		B_TRANSLATE("Background Color"), fBackgroundColor);
-	BCheckBox* transparentCheckbox = new BCheckBox("TransparentCheckbox",
+	fTransparentCheck = new BCheckBox("TransparentCheckbox",
 		B_TRANSLATE("Transparent background for replicant"), nullptr);
-	transparentCheckbox->SetValue(true);
+	fTransparentCheck->SetValue(true);
 
 	BLayoutBuilder::Group<>(backgroundBox, B_VERTICAL, 5)
 		.SetInsets(15, 20, 15, 5)
-		.Add(bgColorButton)
-		.Add(transparentCheckbox);
+		.Add(fBgColorButton)
+		.Add(fTransparentCheck);
 
 	// === 2. Dot diameter field ===
 	fDotSizeText = new BTextControl("DotSize",
@@ -94,16 +94,19 @@ SettingsWindow::SettingsWindow(BRect frame, BMessage& settings)
 		.Add(fInactiveEdgeButton);
 		
 	// === 6. Action buttons ===
-	fCancel	= new BButton("cancel", B_TRANSLATE("Cancel"),
+	fCancel	= new BButton("cancel", B_TRANSLATE("❌ Cancel"),
 						new BMessage(CANCEL_MESSAGE));
-	fApply	= new BButton("apply", B_TRANSLATE("Apply"),
+	fApply	= new BButton("apply", B_TRANSLATE("☑️ Apply"),
 						new BMessage(APPLY_MESSAGE));
-	fOk 	= new BButton("ok", B_TRANSLATE("OK"), 
+	fOk 	= new BButton("ok", B_TRANSLATE("🆗 OK"), 
 						new BMessage(OK_MESSAGE));
+	fDefaults = new BButton("defaults", B_TRANSLATE("🔄 Return to defaults"),
+						new BMessage(DEFAULTS_MSG));
 	fOk->MakeDefault(true);
 	fCancel->SetTarget(this);
 	fApply->SetTarget(this);
 	fOk->SetTarget(this);
+	fDefaults->SetTarget(this);
 	BGroupView* buttonRow = new BGroupView(B_HORIZONTAL);
 	buttonRow->GroupLayout()->SetInsets(0, 0, 0, 0); // Margins
 	buttonRow->GroupLayout()->AddView(fCancel);
@@ -118,13 +121,26 @@ SettingsWindow::SettingsWindow(BRect frame, BMessage& settings)
 		.Add(infoLabel)
 		.Add(activeBox)
 		.Add(inactiveBox)
+		.Add(fDefaults)
 		.Add(buttonRow);
 
 	Show();
 }
 
-SettingsWindow::~SettingsWindow() {
-	
+void SettingsWindow::ReturnToDefaults() {
+	fActiveCenterColor = make_color(60, 60, 255);
+	fActiveCenterButton->SetColor(fActiveCenterColor);
+	fInactiveCenterColor = make_color(0, 0, 0);
+	fInactiveCenterButton->SetColor(fInactiveCenterColor);
+	fActiveEdgeColor = make_color(0, 0, 120);
+	fActiveEdgeButton->SetColor(fActiveEdgeColor);
+	fInactiveEdgeColor = make_color(64, 64, 64);
+	fInactiveEdgeButton->SetColor(fInactiveEdgeColor);
+	fTransparentCheck->SetValue(true);
+	fBackgroundColor = make_color(0, 0, 0);
+	fBgColorButton->SetColor(fBackgroundColor);
+	fDotSizeText->SetText("16");
+	UpdateIfNeeded();
 }
 
 void SettingsWindow::MessageReceived(BMessage* message) {
@@ -164,6 +180,10 @@ void SettingsWindow::MessageReceived(BMessage* message) {
 
 		case CANCEL_MESSAGE:
 			Quit(); // Just closing the window
+			break;
+		
+		case DEFAULTS_MSG:
+			ReturnToDefaults();
 			break;
 
 		default:

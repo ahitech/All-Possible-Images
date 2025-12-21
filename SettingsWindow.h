@@ -22,17 +22,19 @@ class ColorButton;
 const uint32	OK_MESSAGE		= 'Yes!';
 const uint32	APPLY_MESSAGE	= 'Try ';
 const uint32	CANCEL_MESSAGE	= 'No! ';
+const uint32	DEFAULTS_MSG	= 'Back';
 const uint32	TEXT_MODIFIED	= 'txtm';
 
 class SettingsWindow : public BWindow {
 public:
 	SettingsWindow(BRect frame, BMessage& settings);
-	virtual ~SettingsWindow();
+	virtual ~SettingsWindow() {};
 	
 	virtual void MessageReceived(BMessage* in);
 	virtual void SetTarget(BView* in) { fTargetView = in; }
 private:
 	void ApplySettings();
+	void ReturnToDefaults();
 	
 	ColorButton* fBgColorButton;
 	BCheckBox*	fTransparentCheck;
@@ -51,7 +53,7 @@ private:
 	rgb_color 	fInactiveCenterColor;
 	rgb_color	fInactiveEdgeColor;
 	
-	BButton 	*fOk, *fCancel, *fApply;
+	BButton 	*fOk, *fCancel, *fApply, *fDefaults;
 	
 	BMessage 	fSettingsMessage;
 	BView*		fTargetView;

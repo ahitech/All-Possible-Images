@@ -75,6 +75,7 @@ ColorPickerWindow::ColorPickerWindow(BRect frame,
 	
 	fPreview = new ColorPreviewView();
 	fPreview->SetExplicitMinSize(BSize(frame.Width() / 2, 22));
+	fPreview->SetColor(initialColor);
 
 	// Buttons
 	BButton* applyButton = new BButton(B_TRANSLATE("Apply"), new BMessage('aply'));
