@@ -65,7 +65,7 @@ private:
 	status_t	ArchiveState(BMessage *archive, bool isReplicant = false);
 	//! UnarchiveState() loads data from BMessage and is used in constructor from BMessage and in LoadState()
 	status_t	UnarchiveState(BMessage *archive, bool isReplicant = false);
-	void		ApplyDefaultSettings();
+	status_t	ApplyDefaultSettings();
 	
 	void InitDotBitmaps();
 	void RenderDotGradient(BBitmap* bitmap, bool active);
@@ -74,7 +74,7 @@ private:
 	void _ShowContextMenu(BPoint point);
 	void _ShowSettingsWindow();
 
-	
+	BMessage* fSettingsMessage;
 	// This code creates the clockwise spiral from the center outwards.
 	// The original program displayed the LSB of the number at dot (5, 4),
 	// and the bits grew outwards in the following pattern:

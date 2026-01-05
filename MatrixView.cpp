@@ -42,8 +42,10 @@ MatrixView::MatrixView(BRect frame, const char* name)
 		fIsReplicant(false),
 		fWinPos(100, 100),		// Default window position
 		_dotActive(nullptr),
-		_dotInactive(nullptr)
+		_dotInactive(nullptr),
+		fSettingsMessage(nullptr)
 {
+	fSettingsMessage = new BMessage(SETTINGS_MESSAGE);
 	ClearLogFile();
 	ApplyDefaultSettings();		// Default settings are set
 	LoadState();	// Default settings overwritten by actual ones
@@ -114,7 +116,28 @@ int32 MatrixView::VerifyDotSize(int32 &dotSize) const {
 	return dotSize;
 }
 
-void MatrixView::ApplyDefaultSettings() {
+status_t MatrixView::ApplyDefaultSettings() {
+	LogToFile("> Entering ApplyDefaultSettings()\n");
+	if (nullptr = fSettingsMessage) {
+		LogToFile("\tSettings message is not allocated!\n");
+		LogToFile("< Exitting ApplyDefaultSettings()\n");
+		return B_BAD_VALUE;
+	}
+	
+	fSettingsMessage->ReplaceData("active_center", B_RGB_COLOR_TYPE,
+		&MatrixView::kDefaultActiveCenter, sizeof(rgb_color));
+	fSettingsMessage->ReplaceData("active_edge", B_RGB_COLOR_TYPE,
+		&MatrixView::kDefaultActiveEdge, sizeof(rgb_color));
+	fSettingsMessage->ReplaceData("inactive_center", B_RGB_COLOR_TYPE,
+		&MatrixView::kDefaultInactiveCenter, sizeof(rgb_color));
+	fSettingsMessage->ReplaceData("inactive_edge", B_RGB_COLOR_TYPE,
+		&MatrixView::kDefaultInactiveEdge, sizeof(rgb_color));
+	fSettingsMessage->ReplaceData("background", B_RGB_COLOR_TYPE,
+		&MatrixView::kDefaultBackground, sizeof(rgb_color));
+	fSettingsMessage->ReplaceInt32("dot_size", MatrixView::kDefaultDotSize);
+	fSettingsMessage->ReplaceBool("is_transparent", MatrixView::kDefaultTransparentBackground);
+	
+	
 	fDotSize = MatrixView::kDefaultDotSize;
 	fActiveCenter = MatrixView::kDefaultActiveCenter;
 	fActiveEdge = MatrixView::kDefaultActiveEdge;
