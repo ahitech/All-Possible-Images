@@ -19,6 +19,7 @@
 #include <string.h>
 
 const char* kLogFileName = "MatrixView.log";
+const uint	kDraggerSize = 7; 	// By default, BDragger is 7x7 pixels
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MatrixView"
@@ -179,9 +180,14 @@ void MatrixView::AttachedToWindow() {
 	BView::AttachedToWindow();
 	LoadState();
 
-	_dragger = new BDragger(this->Frame(), 
+	BRect draggerFrame(Bounds().right - kDraggerSize,
+	                   Bounds().bottom - kDraggerSize,
+	                   Bounds().right,
+	                   Bounds().bottom);
+	_dragger = new BDragger(draggerFrame, 
 							this,
 							B_FOLLOW_RIGHT | B_FOLLOW_BOTTOM);
+	AddChild(_dragger);
 
 	// Setting Pulse() frequency
 	if (Window())
@@ -311,11 +317,15 @@ void MatrixView::LoadState() {
 
 		// If the window occurs outside of the screen view area,
 		// (for example, because the resolution has changed),
-		if (screenFrame.Contains(_winPos))
+		// and the instance is NOT a replicant, restore position
+		if (screenFrame.Contains(_winPos) &&
+			!_isReplicant)
+		{
 			Window()->MoveTo(_winPos);
-		else
+		} else {
 			if (!_isReplicant)	// Only if the instance is NOT a replicant
 				Window()->MoveTo(100, 100); // Move the window to origin
+		}
 	}
 	MatrixView::LogToFile("< Exitting LoadState()\n");
 }
@@ -389,7 +399,7 @@ void MatrixView::InitBitPosSpiral() {
 		steps++;
 	}
 
- 	DumpBitPos(); // DEBUGGING - just a beautiful printout of the matrix :)
+ 	DumpBitPos(); // Just a beautiful printout of the matrix :)
 }
 
 void MatrixView::DumpBitPos() {
