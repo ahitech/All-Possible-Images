@@ -67,6 +67,16 @@ private:
 	status_t	UnarchiveState(BMessage *archive, bool isReplicant = false);
 	status_t	ApplyDefaultSettings();
 	
+	/**
+	 *	\brief		This function searches for specific settings' values in the
+	 *				message `in`, and, if finds, adds them into the message `out`,
+	 *				replacing them if they were there or adding if they weren't.
+	 *	\param[in]		in		Message with the new values to store
+	 *	\param[in,out]	out		Message where the new values should be stored
+	 *	\returns	B_OK		If everything was good, other error codes otherwise.
+	 */
+	status_t	ReplaceValuesInSettingsMessage(BMessage* out, const BMessage* in);
+	
 	void InitDotBitmaps();
 	void RenderDotGradient(BBitmap* bitmap, bool active);
 	int32 VerifyDotSize(int32 &dotSize) const;

@@ -118,7 +118,7 @@ int32 MatrixView::VerifyDotSize(int32 &dotSize) const {
 
 status_t MatrixView::ApplyDefaultSettings() {
 	LogToFile("> Entering ApplyDefaultSettings()\n");
-	if (nullptr = fSettingsMessage) {
+	if (nullptr == fSettingsMessage) {
 		LogToFile("\tSettings message is not allocated!\n");
 		LogToFile("< Exitting ApplyDefaultSettings()\n");
 		return B_BAD_VALUE;
@@ -198,6 +198,18 @@ void MatrixView::MessageReceived(BMessage* in) {
 			UnarchiveState(in, this->fIsReplicant);
 			Window()->LockLooper();
 			
+			MatrixView::LogToFile("\tUpdating the settings message\n");
+			char *name;
+			uint32 type;
+			int32 count;
+			
+			/* TODO: Сделать здесь замену ReplaceData из новых параметров в
+			 * постоянные настройки.
+			 */
+			if (B_OK != this->ReplaceValuesInSettingsMessage(fSettingsMessage, in)) {
+				// Something bad has happened. Now, what we're doing about it?
+			}
+			
 			MatrixView::LogToFile("\tRendering new bitmaps\n");
 			InitDotBitmaps();
 			Window()->UnlockLooper();
@@ -227,8 +239,12 @@ void MatrixView::MessageReceived(BMessage* in) {
 }
 
 void MatrixView::InitDotBitmaps() {
-	const int size = fDotSize;
+	int size;
+	fSettingsMessage->FindInt32("dot_size", &size);
 	BRect bounds(0, 0, size - 1, size - 1);
+	
+	if (_dotActive != nullptr) delete _dotActive;
+	if (_dotInactive != nullptr) delete _dotInactive;
 
 	_dotActive = new BBitmap(bounds, B_RGBA32, true);
 	_dotInactive = new BBitmap(bounds, B_RGBA32, true);
@@ -567,12 +583,36 @@ void MatrixView::LoadState() {
 }
 
 void MatrixView::RenderDotGradient(BBitmap* bitmap, bool active) {
+	LogToFile("> Entering RenderDotGradient()\n");
+	
 	uint8* bits = (uint8*)bitmap->Bits();
 	int32 bpr = bitmap->BytesPerRow();
-	const int size = fDotSize;
-	const int radius = fDotSize / 2;
+	int size;
+	if (B_OK != fSettingsMessage->FindInt32("dot_size", &size)) {
+		size = fDotSize;
+	}
+	const int radius = size / 2;
 	
-	LogToFile("> Entering RenderDotGradient()\n");
+	LogToFile("\tNew size is %d, radius = %d.\n", size, radius);
+	
+	auto getColor = [&](const char* name, rgb_color& out, rgb_color def) {
+        const void* data;
+        ssize_t size;
+        status_t err = fSettingsMessage->FindData(name, B_RGB_COLOR_TYPE, &data, &size);
+        if (err == B_OK &&
+            size == sizeof(rgb_color) &&
+            data != nullptr)
+        {
+            out = *reinterpret_cast<const rgb_color*>(data);
+        } else {
+        	out = def;
+        }
+    };
+
+    getColor("active_center", 	fActiveCenter,		kDefaultActiveCenter);
+    getColor("active_edge",		fActiveEdge,		kDefaultActiveEdge);
+    getColor("inactive_center", fInactiveCenter,	kDefaultInactiveCenter);
+    getColor("inactive_edge",	fInactiveEdge,		kDefaultInactiveEdge);	
 
 	rgb_color center = active ? fActiveCenter : fInactiveCenter;
 	rgb_color edge   = active ? fActiveEdge : fInactiveEdge;
@@ -743,4 +783,45 @@ void MatrixView::SaveNewPosition(BPoint point) {
 	fWinPos = point;
 	MatrixView::LogToFile("> SaveNewPosition(). New origin is (%.2f, %.2f)\n",
 						fWinPos.x, fWinPos.y);
+}
+
+status_t	MatrixView::ReplaceValuesInSettingsMessage(BMessage* out, const BMessage* in)
+{
+    if (out == nullptr || in == nullptr) {
+        return B_BAD_ADDRESS;
+    }
+
+    status_t result = B_OK;
+
+    // Вспомогательный лямбда для rgb_color полей
+    auto replaceColor = [&](const char* name) {
+        const void* data;
+        ssize_t size;
+        if (in->FindData(name, B_RGB_COLOR_TYPE, &data, &size) == B_OK
+                && size == sizeof(rgb_color))
+        {
+            if (out->ReplaceData(name, B_RGB_COLOR_TYPE, data, size) != B_OK)
+                out->AddData(name, B_RGB_COLOR_TYPE, data, size);
+        }
+    };
+
+    replaceColor("active_center");
+    replaceColor("active_edge");
+    replaceColor("inactive_center");
+    replaceColor("inactive_edge");
+    replaceColor("background");
+
+    int32 dotSize;
+    if (in->FindInt32("dot_size", &dotSize) == B_OK) {
+        if (out->ReplaceInt32("dot_size", dotSize) != B_OK)
+            out->AddInt32("dot_size", dotSize);
+    }
+
+    bool transparent;
+    if (in->FindBool("is_transparent", &transparent) == B_OK) {
+        if (out->ReplaceBool("is_transparent", transparent) != B_OK)
+            out->AddBool("is_transparent", transparent);
+    }
+
+    return result;
 }
